@@ -2,18 +2,14 @@ import argparse
 import os
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import numpy as np
+from typing import Dict, Tuple, List, Any
 
 def parse(csv_path):
    #Load the dataset
    print(f"Location of the file: {csv_path}")
    df = pd.read_csv(csv_path)
    return df
-
-
-import pandas as pd
-import numpy as np
-from typing import Dict, Tuple, List, Any
-
 
 def get_unique_mappings(df: pd.DataFrame) -> Tuple[Dict, Dict, Dict]:
    """
