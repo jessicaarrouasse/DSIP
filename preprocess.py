@@ -9,12 +9,119 @@ def parse(csv_path):
    df = pd.read_csv(csv_path)
    return df
 
+
+import pandas as pd
+import numpy as np
+from typing import Dict, Tuple, List, Any
+
+
+def get_unique_mappings(df: pd.DataFrame) -> Tuple[Dict, Dict, Dict]:
+   """
+   Extract unique mappings between user_group_id, gender, and age_level from known data.
+   """
+   df_known = df.dropna(subset=['user_group_id', 'gender', 'age_level'])
+
+   # Create (gender, age_level) -> user_group_id mapping
+   gender_age_groups = df_known.groupby(['gender', 'age_level'])['user_group_id'].unique()
+   gender_age_to_group = {}
+   for (g, a), group_ids in gender_age_groups.items():
+      if len(group_ids) == 1:
+         gender_age_to_group[(g, a)] = group_ids[0]
+
+   # Create user_group_id -> gender mapping
+   group_gender = df_known.groupby('user_group_id')['gender'].unique()
+   group_to_gender = {}
+   for group_id, genders in group_gender.items():
+      if len(genders) == 1:
+         group_to_gender[group_id] = genders[0]
+
+   # Create user_group_id -> age_level mapping
+   group_age = df_known.groupby('user_group_id')['age_level'].unique()
+   group_to_age = {}
+   for group_id, ages in group_age.items():
+      if len(ages) == 1:
+         group_to_age[group_id] = ages[0]
+
+   return gender_age_to_group, group_to_gender, group_to_age
+
+
+def impute_from_group_id(row: pd.Series, group_to_gender: Dict, group_to_age: Dict) -> pd.Series:
+   """
+   Impute gender and age_level from user_group_id.
+   """
+   if pd.notna(row['user_group_id']):
+      group_id = row['user_group_id']
+
+      # Impute gender if missing
+      if pd.isna(row['gender']) and group_id in group_to_gender:
+         row['gender'] = group_to_gender[group_id]
+
+      # Impute age_level if missing
+      if pd.isna(row['age_level']) and group_id in group_to_age:
+         row['age_level'] = group_to_age[group_id]
+
+   return row
+
+
+def impute_group_id(row: pd.Series, gender_age_to_group: Dict) -> pd.Series:
+   """
+   Impute user_group_id from gender and age_level.
+   """
+   if pd.isna(row['user_group_id']) and pd.notna(row['gender']) and pd.notna(row['age_level']):
+      key = (row['gender'], row['age_level'])
+      if key in gender_age_to_group:
+         row['user_group_id'] = gender_age_to_group[key]
+
+   return row
+
+
+def impute_demographics(df: pd.DataFrame, direction: str = 'both') -> pd.DataFrame:
+   """
+   Perform imputation on the DataFrame in specified direction.
+   """
+   gender_age_to_group, group_to_gender, group_to_age = get_unique_mappings(df)
+   result = df.copy()
+
+   if direction in ['both', 'from_group']:
+      # Impute gender and age_level from user_group_id
+      result = result.apply(
+         lambda row: impute_from_group_id(row, group_to_gender, group_to_age),
+         axis=1
+      )
+
+   if direction in ['both', 'to_group']:
+      # Impute user_group_id from gender and age_level
+      result = result.apply(
+         lambda row: impute_group_id(row, gender_age_to_group),
+         axis=1
+      )
+
+   return result
+
+
+def iterative_imputation(df: pd.DataFrame) -> pd.DataFrame:
+   """
+   Perform iterative imputation until convergence or max iterations reached.
+   """
+   result = df.copy()
+   changes = 1
+   while changes > 0:
+      # Store previous state to check for changes
+      previous_nulls = result.isna().sum().sum()
+      # Perform one round of imputation
+      result = impute_demographics(result, direction='both')
+      # Check how many values were filled
+      current_nulls = result.isna().sum().sum()
+      changes = previous_nulls - current_nulls
+   return result
+
 def clean_data(df):
-   data = df.drop_duplicates()
+   clean_df = df.drop_duplicates()
    # TODO Removing outliers (IQR Method???)
-   # TODO Imputation (dealing with missing values => user_group_id by gender/age_level)
+   # demographics imputation
+   imputed_clean_df = iterative_imputation(clean_df)
    # TODO Normalizing (StandardScaler ??)
-   return data
+   return imputed_clean_df
 
 def split_data(df):
    # Define the feature columns (X) and target column (y)
