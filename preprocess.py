@@ -71,11 +71,28 @@ def impute_group_id(row: pd.Series, gender_age_to_group: Dict) -> pd.Series:
    return row
 
 
+def impute_user_info(row: pd.Series, user_to_gender: Dict, user_to_age: Dict) -> pd.Series:
+   """
+   Olga: Impute gender and age_level from user_id.
+   """
+   if pd.isna(row['gender']) and row['user_id'] in user_to_gender:
+      row['gender'] = user_to_gender[row['user_id']]
+
+   if pd.isna(row['age_level']) and row['user_id'] in user_to_age:
+      row['age_level'] = user_to_age[row['user_id']]
+
+   return row
+
 def impute_demographics(df: pd.DataFrame, direction: str = 'both') -> pd.DataFrame:
    """
    Perform imputation on the DataFrame in specified direction.
    """
    gender_age_to_group, group_to_gender, group_to_age = get_unique_mappings(df)
+
+   # Olga: Create mappings from user_id to gender and age_level
+   user_to_gender = df[['user_id', 'gender']].dropna().set_index('user_id')['gender'].to_dict()
+   user_to_age = df[['user_id', 'age_level']].dropna().set_index('user_id')['age_level'].to_dict()
+
    result = df.copy()
 
    if direction in ['both', 'from_group']:
@@ -91,9 +108,13 @@ def impute_demographics(df: pd.DataFrame, direction: str = 'both') -> pd.DataFra
          lambda row: impute_group_id(row, gender_age_to_group),
          axis=1
       )
+   # Olga: Impute gender and age_level from user_id
+   result = result.apply(
+      lambda row: impute_user_info(row, user_to_gender, user_to_age),
+      axis=1
+   )
 
    return result
-
 
 def iterative_imputation(df: pd.DataFrame) -> pd.DataFrame:
    """
