@@ -134,6 +134,7 @@ def iterative_imputation(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean_data(df):
    clean_df = df.drop_duplicates()
+   clean_df = df.dropna(subset=['is_click'])
    # TODO Removing outliers (IQR Method???)
    # demographics imputation
    imputed_clean_df = iterative_imputation(clean_df)
