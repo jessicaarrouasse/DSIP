@@ -6,6 +6,7 @@ import numpy as np
 from typing import Dict, Tuple, List, Any
 import logging
 import pickle
+from sklearn.preprocessing import StandardScaler
 
 # Set up logging configuration
 logging.basicConfig(
@@ -212,15 +213,16 @@ def compute_train_stats(train_data: pd.DataFrame) -> dict:
    logging.info("Statistics computation completed.")
    return stats
 
-def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_stats: dict = None) -> Tuple[np.ndarray, np.ndarray]:
+def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_stats: dict = None, scaler: StandardScaler = None) -> Tuple[np.ndarray, np.ndarray, StandardScaler]:
    '''
    The function extracts features and labels from the input DataFrame.
    Args:
       df (pd.DataFrame): The DataFrame containing the data.
       selected_features (List[str]): The list of selected features to extract.
       train_stats (dict): A dictionary containing precomputed statistics for the training set.
+      scaler (StandardScaler): An optional scaler object for feature scaling. If None, a new scaler will be created.
    Returns:
-      Tuple[np.ndarray, np.ndarray]: A tuple containing the features (X) and labels (y) as NumPy arrays.
+      Tuple[np.ndarray, np.ndarray, StandardScaler]: A tuple containing the features (X), labels (y), and the scaler object.
    '''
    df = df.copy()
    logging.info("Starting feature extraction.")
@@ -290,7 +292,14 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
    X = df[selected_features].to_numpy()
    y = df['is_click'].to_numpy()
    
-   return X, y
+   # Feature scaling
+   if scaler is None:
+      scaler = StandardScaler()  # Create a new scaler if not provided
+      X = scaler.fit_transform(X)  # Fit and transform for training data
+   else:
+      X = scaler.transform(X)  # Transform for test/validation data
+   
+   return X, y, scaler
 
 def save_dataframe(df, filename):
    # Create the 'data' folder if it doesn't exist
@@ -326,10 +335,10 @@ def main(csv_path):
    # 3.2 Select features - TODO: consider to move to consts
    selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity', 'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count', 'product_category_1_age_level']
    # 3.3 Feature Extraction for Training
-   X_train, y_train = feature_extraction(train_data, selected_features)
+   X_train, y_train, scaler = feature_extraction(train_data, selected_features)
    # 3.4 Feature Extraction for Test/Validation (using precomputed statistics)
-   X_test, y_test = feature_extraction(test_data, selected_features, train_stats)
-   X_validation, y_validation = feature_extraction(validation_data, selected_features, train_stats)
+   X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats)
+   X_validation, y_validation, _ = feature_extraction(validation_data, selected_features, train_stats, scaler=scaler)
    # Save the features and labels as pickle files
    save_pickle((X_train, y_train), "X_train_y_train.pkl")
    save_pickle((X_test, y_test), "X_test_y_test.pkl")
