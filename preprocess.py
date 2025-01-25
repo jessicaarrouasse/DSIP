@@ -135,29 +135,62 @@ def iterative_imputation(df: pd.DataFrame) -> pd.DataFrame:
 def clean_data(df):
    clean_df = df.drop_duplicates()
    clean_df = df.dropna(subset=['is_click'])
+   # Ensure datetime is parsed
+   clean_df = clean_df.copy()
+   clean_df['DateTime'] = pd.to_datetime(clean_df['DateTime'])
    # TODO Removing outliers (IQR Method???)
    # demographics imputation
    imputed_clean_df = iterative_imputation(clean_df)
    # TODO Normalizing (StandardScaler ??)
    return imputed_clean_df
 
-def split_data(df):
-   # Define the feature columns (X) and target column (y)
-   # session_id,DateTime,user_id,product,campaign_id,webpage_id,product_category_1
-   X = df.loc[:, df.columns != 'is_click']  # Feature columns
-   y = df["is_click"]  # Target column
-
-   # Split the dataset into training, testing and validation sets
-   X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-   # validation = 20%, test = 20% and train = 60%
-   X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.25, random_state=42)
-
-   # Combine X and y back into dataframes for train, test and validation set
-   train_data = pd.concat([X_train, y_train], axis=1)  # Combine features and target for training data
-   test_data = pd.concat([X_test, y_test], axis=1)  # Combine features and target for testing data
-   validation_data = pd.concat([X_val, y_val], axis=1)  # Combine features and target for validation data
-
-   return train_data, test_data, validation_data
+def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+   '''
+   The function splits the input cleaned df into training, test and validation sets 
+   while ensuring representativeness and preventing data leakage. Each user_id/session_id 
+   is assigned to only one set to avoid overlap.
+   Args:
+      df (pd.DataFrame): The cleaned DataFrame to be split.
+   Returns:
+      Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: DataFrames for each set.
+   '''
+   df = df.copy()
+   # Separate rows with null user_id
+   null_user_data = df[df['user_id'].isnull()]
+   non_null_user_data = df[df['user_id'].notnull()]
+   # Group by `user_id` for non-null data for stratified splitting
+   user_groups = non_null_user_data.groupby('user_id')
+   user_df = pd.DataFrame({
+    'user_id': user_groups.size().index,
+    'is_click': user_groups['is_click'].max(),  # Use max to indicate if the user clicked at least once
+   })
+   # Split into train and temp (validation + test) based on user_id
+   train_users, temp_users = train_test_split(
+      user_df['user_id'],  # Use user_id for splitting
+      test_size=0.4,  # 40% for validation + test
+      stratify=user_df['is_click'],  # Stratify by is_click
+      random_state=42
+   )
+   # Split the remaining data (temp_users) into validation and test sets
+   val_users, test_users = train_test_split(
+      temp_users,
+      test_size=0.5,  # 50% of 40% -> 20% for validation, 20% for test
+      stratify=user_df.loc[temp_users, 'is_click'],  # Stratify by is_click for balance
+      random_state=42
+   )
+   # Create the final train, validation, and test sets
+   train_data = non_null_user_data[non_null_user_data['user_id'].isin(train_users)]
+   val_data = non_null_user_data[non_null_user_data['user_id'].isin(val_users)]
+   test_data = non_null_user_data[non_null_user_data['user_id'].isin(test_users)]
+   # Randomly split null_user_data proportionally
+   null_train, null_temp = train_test_split(null_user_data, test_size=0.4, random_state=42)
+   null_validation, null_test = train_test_split(null_temp, test_size=0.5, random_state=42)
+   # Combine splits
+   train_data = pd.concat([train_data, null_train], ignore_index=True)
+   val_data = pd.concat([val_data, null_validation], ignore_index=True)
+   test_data = pd.concat([test_data, null_test], ignore_index=True)
+   
+   return train_data, test_data, val_data
 
 
 def save_dataframe(df, filename):
@@ -168,15 +201,17 @@ def save_dataframe(df, filename):
    df.to_csv(file_path, index=False)
 
 def main(csv_path):
+   # 1. Clean Data
    df = parse(csv_path)
    df = clean_data(df)
+   # 2. Split Data
    train_data, test_data, validation_data = split_data(df)
    save_dataframe(train_data, "train.csv")
    save_dataframe(test_data, "test.csv")
    save_dataframe(validation_data, "validation.csv")
-
    print("Train, test and validation datasets saved")
-
+   # 3. Feature Extraction
+   
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()
