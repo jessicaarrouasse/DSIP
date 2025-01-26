@@ -11,6 +11,8 @@ import numpy as np
 from sklearn.metrics import mean_squared_error, confusion_matrix, accuracy_score, roc_auc_score, precision_score, recall_score, f1_score, make_scorer
 from sklearn.model_selection import cross_val_score, KFold
 from models_name import ModelsName
+from sklearn.model_selection import GridSearchCV
+from grid_search_params import grid_search_params
 
 
 def get_data():
@@ -136,7 +138,7 @@ def cross_validate_model(model_name, model_params, X, y, n_splits=5):
     return model, metrics
 
 
-def train(model_name, model_params, split_num=5):
+def train(model_name, model_params, split_num=5, do_grid_search=False):
     """
     Train and evaluate a model, and save predictions plots to a PDF.
 
@@ -148,11 +150,8 @@ def train(model_name, model_params, split_num=5):
     Returns:
         tuple: The trained model and the Mean Squared Error (MSE).
     """
-
-    print('model_params:', model_params)
     
     X_train, y_train, X_test, y_test, X_validation, y_validation = get_data()
-
 
     if split_num > 1:
         # Combine train and test sets for cross-validation
@@ -164,26 +163,24 @@ def train(model_name, model_params, split_num=5):
         return model, metrics["mse"]
     else:
         # Regular training process
-        model = get_model_dynamically(model_name, **model_params)
-        model.fit(X_train, y_train)
+        if do_grid_search:
+            grid_params = grid_search_params[model_name]
+            model, best_params = perform_grid_search(model_name, model_params, X_train, y_train, grid_params)
+            print(f"Using best parameters from Grid Search: {best_params}")
+        else:
+            model = get_model_dynamically(model_name, **model_params)
+            print('model_params:', model_params)
+
+        model.fit(X_train, y_train) 
+        print("Training completed for model:", model_name)
 
         # Predict on the test set
         y_pred = model.predict(X_test)
         y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
 
         # Evaluate the model on the test set
+        evaluate_model(y_test, y_pred, y_pred_proba, model_name, split_num)
         mse = mean_squared_error(y_test, y_pred)
-        accuracy = accuracy_score(y_test, y_pred.round())
-        auc = roc_auc_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred.round())
-        recall = recall_score(y_test, y_pred.round())
-        f1 = f1_score(y_test, y_pred.round())
-
-        print(f"{model_name} - Split {split_num}")
-        print(f"Mean Squared Error: {mse}")
-        print(f"Accuracy: {accuracy}")
-        print(f"AUC-ROC: {auc}")
-        print(f"Precision: {precision}, Recall: {recall}, F1 Score: {f1}")
 
         return model, mse
 
@@ -227,6 +224,43 @@ def evaluate_model(y_test, y_pred, y_pred_proba=None, model_name=None, split_num
         'f1': f1
     }
 
+    
+def perform_grid_search(model_name, model_params, X, y, grid_params, scoring="accuracy", cv=3):
+    """
+    Perform Grid Search on the specified model.
+
+    Args:
+        model_name (str): Name of the model.
+        model_params (dict): Initial parameters for the model.
+        X (pd.DataFrame): Features for training.
+        y (pd.Series): Target variable.
+        grid_params (dict): Grid search parameters for the model.
+        scoring (str): Scoring metric for Grid Search.
+        cv (int): Number of cross-validation folds.
+
+    Returns:
+        tuple: Best model and best parameters.
+    """
+    # Get the model dynamically
+    model = get_model_dynamically(model_name, **model_params)
+    
+    # Initialize GridSearchCV
+    grid_search = GridSearchCV(
+        estimator=model,
+        param_grid=grid_params,
+        scoring=scoring,
+        cv=cv,
+        n_jobs=-1
+    )
+    
+    # Perform Grid Search
+    print(f"Performing Grid Search for {model_name}...")
+    grid_search.fit(X, y)
+    
+    print(f"Best Parameters for {model_name}: {grid_search.best_params_}")
+    return grid_search.best_estimator_, grid_search.best_params_
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Trainer")
@@ -243,6 +277,7 @@ if __name__ == '__main__':
     parser.add_argument('--C', type=float, help="Regularization parameter for SVC.")
     parser.add_argument('--gamma', type=str, help="Gamma parameter for SVC.")
     parser.add_argument('--random-state', type=int, help="Random state for reproducibility.")
+    parser.add_argument('--grid-search', type=bool, help="Run grid search.")
 
 
     args = parser.parse_args()
@@ -266,6 +301,5 @@ if __name__ == '__main__':
     # Remove None values (only pass valid parameters)
     model_params = {k: v for k, v in model_params.items() if v is not None}
     
-
-    train(model_name=args.model_name, model_params=model_params)
+    train(model_name=args.model_name, model_params=model_params, split_num=1, do_grid_search=args.grid_search == True)
 

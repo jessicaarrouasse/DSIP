@@ -79,3 +79,8 @@ def train_model(ctx, config_name=None):
     
     # Run the command
     ctx.run(command)
+
+@task(name="train-grid-search")
+def train_grid_search(ctx, model_name=None):
+    command = f"python train.py --model-name {model_name} --grid-search {True}"
+    ctx.run(command)
