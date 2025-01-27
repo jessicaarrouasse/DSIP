@@ -339,6 +339,17 @@ def main(csv_path):
    # 3.4 Feature Extraction for Test/Validation (using precomputed statistics)
    X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats)
    X_validation, y_validation, _ = feature_extraction(validation_data, selected_features, train_stats, scaler=scaler)
+   
+   # # TO-DO? Remove null values from features
+   # # Drop rows with NaN
+   # X_train = X_train[~np.isnan(X_train).any(axis=1)]
+   # X_test = X_test[~np.isnan(X_test).any(axis=1)]
+   # X_validation = X_validation[~np.isnan(X_validation).any(axis=1)]
+   # # OR impute missing with 0
+   # X_train = np.nan_to_num(X_train)
+   # X_test = np.nan_to_num(X_test)
+   # X_validation = np.nan_to_num(X_validation)
+   
    # Save the features and labels as pickle files
    save_pickle((X_train, y_train), "X_train_y_train.pkl")
    save_pickle((X_test, y_test), "X_test_y_test.pkl")
