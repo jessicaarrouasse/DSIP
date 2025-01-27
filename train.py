@@ -11,7 +11,7 @@ from sklearn.metrics import ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import precision_recall_fscore_support, recall_score, roc_auc_score, accuracy_score, classification_report, roc_curve
-
+from sklearn.tree import DecisionTreeClassifier
 
 # Set up logging configuration
 logging.basicConfig(
@@ -59,6 +59,22 @@ def save_model(model, model_name: str):
         pickle.dump(model, f)
     logging.info(f"Model saved to {model_path}")
 
+def plot_feature_importances(model, feature_names):
+    """
+    Plot the feature importances from the trained Random Forest model.
+    """
+    importances = model.feature_importances_
+    indices = importances.argsort()[::-1]  # Sort the importances in descending order
+
+    # Plot the feature importances
+    plt.figure(figsize=(10, 6))
+    plt.title("Feature Importances")
+    plt.barh(range(len(indices)), importances[indices], align="center")
+    plt.yticks(range(len(indices)), [feature_names[i] for i in indices])
+    plt.xlabel("Relative Importance")
+    plt.tight_layout()
+    plt.show()
+
 def train(data_path: str, model_name: str, config: dict):
     # Create a formatted experiment name
     experiment_name = f"{model_name}_exp_{int(time.time())}"
@@ -67,6 +83,12 @@ def train(data_path: str, model_name: str, config: dict):
     
     # Load the data
     X_train, y_train, X_test, y_test, X_val, y_val = load_pickles(data_path)
+    
+    # # Select features by their indices (you can change this list as needed)
+    # features_idx = [0, 1, 2, 3, 4, 5, 6, 8]  # selecting best 8 features
+    # X_train = X_train[:, features_idx]
+    # X_test = X_test[:, features_idx]
+    # X_val = X_val[:, features_idx]
     
     # Initialize and train the Random Forest model using config
     model = RandomForestClassifier(
@@ -77,8 +99,21 @@ def train(data_path: str, model_name: str, config: dict):
         class_weight=config.get('class_weight', None),    # Default value None
         random_state=config.get('random_state', 42)      # Default value 42
     )
+    # Initialize and train the Decision Tree model using config
+    # model = DecisionTreeClassifier(
+    #     criterion=config.get('criterion', 'gini'),  # Default is 'gini'
+    #     max_depth=config.get('max_depth', None),     # Default value None
+    #     min_samples_split=config.get('min_samples_split', 2),  # Default value 2
+    #     min_samples_leaf=config.get('min_samples_leaf', 1),    # Default value 1
+    #     class_weight=config.get('class_weight', None),    # Default value None
+    #     random_state=config.get('random_state', 42)      # Default value 42
+    # )
+    
     model.fit(X_train, y_train)
     logging.info("Model training completed.")
+    # Plot feature importances
+    feature_names = [f"Feature {i}" for i in range(X_train.shape[1])]  # don't have feature names
+    plot_feature_importances(model, feature_names)
     
     # Evaluate the model on the val set (for now - still finetune)
     y_val_pred = model.predict(X_val)
