@@ -288,7 +288,7 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
    df['product_category_1_age_level'] = df['product_category_1'] * df['age_level'] 
    
    #Remove Null
-   # df.dropna(subset=selected_features)
+   df = df.dropna(subset=selected_features)
 
    logging.info("Feature extraction completed.")
    # Extract selected features and labels

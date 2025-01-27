@@ -13,7 +13,7 @@ grid_search_params = {
         # "bootstrap": [True, False],
     },
     "SVC": {
-        "C": [0.1, 1, 10, 100],  # Regularization parameter
+        "C": [0.1, 1, 10],  # Regularization parameter
         "kernel": ["linear", "poly", "rbf", "sigmoid"],  # Kernel type
         "gamma": ["scale", "auto"],  # Kernel coefficient
     },
