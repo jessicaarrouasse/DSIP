@@ -3,6 +3,8 @@ import pickle
 import logging
 import argparse
 import wandb
+import json
+import time
 import pandas as pd
 from typing import Tuple
 from sklearn.metrics import ConfusionMatrixDisplay
@@ -39,6 +41,14 @@ def load_pickles(data_path: str) -> Tuple:
     
     return X_train, y_train, X_test, y_test, X_validation, y_validation
 
+def load_config(config_path: str):
+    """
+    Load the configuration from a JSON file.
+    """
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return config
+
 def save_model(model, model_name: str):
     """
     Save the trained model to a pickle file.
@@ -49,15 +59,24 @@ def save_model(model, model_name: str):
         pickle.dump(model, f)
     logging.info(f"Model saved to {model_path}")
 
-def train(data_path: str, model_name: str):
+def train(data_path: str, model_name: str, config: dict):
+    # Create a formatted experiment name
+    experiment_name = f"{model_name}_exp_{int(time.time())}"
     # Initialize wandb to track the experiment
-    wandb.init(project="ad-click-prediction", name=model_name)
+    wandb.init(project="ad-click-prediction", name=experiment_name, config=config)
     
     # Load the data
     X_train, y_train, X_test, y_test, X_val, y_val = load_pickles(data_path)
     
-    # Initialize and train the Random Forest model
-    model = RandomForestClassifier(n_estimators=50, random_state=42, class_weight='balanced')
+    # Initialize and train the Random Forest model using config
+    model = RandomForestClassifier(
+        n_estimators=config.get('n_estimators', 100),  # Default value 100
+        max_depth=config.get('max_depth', None),        # Default value None
+        min_samples_split=config.get('min_samples_split', 2),  # Default value 2
+        min_samples_leaf=config.get('min_samples_leaf', 1),    # Default value 1
+        class_weight=config.get('class_weight', None),    # Default value None
+        random_state=config.get('random_state', 42)      # Default value 42
+    )
     model.fit(X_train, y_train)
     logging.info("Model training completed.")
     
@@ -127,7 +146,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train a model on the given data")
     parser.add_argument("-d", "--data_path", type=str, help="Path to the data directory")
     parser.add_argument("-m", "--model_name", type=str, help="Name of the model to save")
+    parser.add_argument("-c", "--config_path", type=str, help="Path to the configuration file")
     args = parser.parse_args()
     
+    # Load configuration
+    config = load_config(args.config_path)
+    
     # Train the model
-    train(args.data_path, args.model_name)
+    train(args.data_path, args.model_name, config)
