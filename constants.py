@@ -1,1 +1,2 @@
-DECISION_TREE = "decision_tree"
+KNN = "knn"
+LOGISTIC_REGRESSION = "logistic_regression"

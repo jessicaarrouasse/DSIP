@@ -2,35 +2,33 @@ import argparse
 import os
 import pickle
 
-import pandas as pd
-from constants import DECISION_TREE
+from utils import get_data, save_numpy_array, save_dataframe
 
 
-def get_data(csv_path):
-    df = pd.read_csv(csv_path)
-    return df
-
-def load_model(model_name):
-    # load
-    with open(f'models/{model_name}.pkl', 'rb') as f:
+def load_model(model_path):
+    with open(model_path, 'rb') as f:
         model = pickle.load(f)
     return model
 
-def predict(model_name, csv_path):
-    predict_df = get_data(csv_path)
-    model = load_model(model_name)
+def save_predictions(model_name, predictions):
+    os.makedirs("predictions", exist_ok=True)
+    save_numpy_array(predictions, f"./predictions/{model_name}_predictions.csv")
+
+
+def main(model_path, test_data_path):
+    predict_df = get_data(test_data_path)
+    model = load_model(model_path)
     predictions = model.predict(predict_df)
-
-
-
-    print("Predict the model")
-
+    predictions_proba = model.predict_proba(predict_df)
+    model_name = model_path.split("/")[-1].split(".")[0]
+    save_predictions(f"{model_name}", predictions)
+    save_predictions(f"{model_name}_proba", predictions_proba)
+    print("Done")
 
 
 if __name__ == '__main__':
-   parser = argparse.ArgumentParser(description="Trainer")
-   parser.add_argument("-m", "--model_name", default=DECISION_TREE)
-   parser.add_argument("-e", "--csv_path", default=DECISION_TREE)
-
+   parser = argparse.ArgumentParser()
+   parser.add_argument("--model-path", type=str)
+   parser.add_argument( "--test-data-path", type=str)
    args = parser.parse_args()
-   predict(args.model_name, args.csv_path)
+   main(args.model_path, args.test_data_path)
