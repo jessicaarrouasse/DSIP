@@ -6,16 +6,11 @@ grid_search_params = {
         "max_iter": [100, 200, 500],  # Maximum number of iterations
     },
     "RandomForestClassifier": {
-        "n_estimators": [10, 50, 100, 200],
+        "n_estimators": [10, 50, 100],
         "max_depth": [None, 10, 20, 30],
         "min_samples_split": [2, 5, 10],
         "min_samples_leaf": [1, 2, 4],
-        "bootstrap": [True, False],
-        # "n_estimators": [10, 50, 100, 200],  # Number of trees
-        # "max_depth": [None, 10, 20, 30],  # Maximum depth of the trees
-        # "min_samples_split": [2, 5, 10],  # Minimum samples required to split a node
-        # "min_samples_leaf": [1, 2, 4],  # Minimum samples required at a leaf node
-        # "bootstrap": [True, False],  # Whether bootstrap samples are used
+        # "bootstrap": [True, False],
     },
     "SVC": {
         "C": [0.1, 1, 10, 100],  # Regularization parameter
