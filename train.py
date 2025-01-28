@@ -5,13 +5,16 @@ import pandas as pd
 import numpy as np
 import importlib
 import inspect
-from sklearn.metrics import mean_squared_error, accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
+from sklearn.metrics import mean_squared_error, accuracy_score, roc_auc_score, precision_score, recall_score, f1_score, confusion_matrix, roc_curve, auc, classification_report
 from sklearn.model_selection import KFold, GridSearchCV
 from models_name import ModelsName
 import wandb
 from dotenv import load_dotenv
 import os
 from grid_search_params import grid_search_params
+from imblearn.over_sampling import SMOTE
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Load data function
 def get_data():
@@ -79,11 +82,43 @@ def calculate_metrics(y_true, y_pred, y_pred_proba=None):
         'auc': roc_auc_score(y_true, y_pred_proba) if y_pred_proba is not None else None
     }
 
-# Log metrics to wandb
-def log_to_wandb(metrics, prefix=None):
-    if prefix:
-        metrics = {f"{prefix}_{key}": value for key, value in metrics.items()}
-    wandb.log(metrics)
+# def log_to_wandb(metrics, prefix=None):
+#     print('metrics', metrics)
+
+#     tables = {} 
+
+#     for key, value in metrics.items():
+#         full_key = f"{prefix}_{key}" if prefix else key
+#         parts = full_key.split("_")
+
+#         if len(parts) >= 3:
+#             fold = parts[1]
+#             metric_name = "_".join(parts[2:])
+#         elif len(parts) == 2:
+#             fold = "avg"
+#             metric_name = parts[1]
+#         else:
+#             print(f"Skipping invalid metric key: {full_key}")
+#             continue
+
+#         if fold not in tables:
+#             tables[fold] = wandb.Table(columns=["Metric", "Value"])
+
+#         tables[fold].add_data(metric_name, value)
+
+#     for fold, table in tables.items():
+#         wandb.log({f"Metrics Table - Fold {fold}": table})
+
+def log_classification_report(y_true, y_pred, fold):
+    class_report = classification_report(y_true, y_pred, output_dict=True)
+    class_report_df = pd.DataFrame(class_report).transpose()
+    
+    class_report_df.insert(0, "Metric", class_report_df.index)  
+    
+    classification_table = wandb.Table(dataframe=class_report_df)
+    wandb.log({f"Classification_Report_Fold_{fold}": classification_table})
+
+
 
 # Cross-validation
 def cross_validate_model(model_name, model_params, X, y, n_splits=5):
@@ -98,17 +133,23 @@ def cross_validate_model(model_name, model_params, X, y, n_splits=5):
         model.fit(X_train, y_train)
 
         y_pred = model.predict(X_test)
+        plot_confusion_matrix(y_test, y_pred, model_name, fold)
+        
         y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
+        if y_pred_proba is not None:
+            plot_roc_curve(y_test, y_pred_proba, model_name, fold)
 
         metrics = calculate_metrics(y_test, y_pred, y_pred_proba)
-        log_to_wandb(metrics, prefix=f"fold_{fold}")
+        # log_to_wandb(metrics, prefix=f"fold_{fold}")
+        log_classification_report(y_test, y_pred, fold)
         fold_metrics.append(metrics)
 
     avg_metrics = {
         key: np.mean([fold[key] for fold in fold_metrics if fold[key] is not None])
         for key in fold_metrics[0]
     }
-    log_to_wandb(avg_metrics, prefix="avg")
+    # log_to_wandb(avg_metrics, prefix="avg")
+
 
     return avg_metrics
 
@@ -136,6 +177,8 @@ def login_to_wandb(model_name, model_params):
 # Train function
 def train(model_name, model_params, split_num=5, do_grid_search=False):
     X_train, y_train, X_test, y_test = get_data()
+    smote = SMOTE(random_state=42)
+    X_train, y_train = smote.fit_resample(X_train, y_train)
 
     if do_grid_search:
         print("Performing grid search...")
@@ -156,10 +199,43 @@ def train(model_name, model_params, split_num=5, do_grid_search=False):
         y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
 
         metrics = calculate_metrics(y_test, y_pred, y_pred_proba)
-        log_to_wandb(metrics, prefix="test")
+        # log_to_wandb(metrics, prefix="test")
+        log_classification_report(y_test, y_pred, 1)
+
 
         save_model(model, model_name)
         return metrics
+    
+def plot_confusion_matrix(y_true, y_pred, model_name, fold):
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(6, 4))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Negative", "Positive"], yticklabels=["Negative", "Positive"])
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+    plt.title(f"Confusion Matrix - {model_name} (Fold {fold})")
+
+    filename = f"confusion_matrix_fold_{fold}.png"
+    plt.savefig(filename)
+    wandb.log({f"confusion_matrix_fold_{fold}": wandb.Image(filename)})
+    plt.close()
+
+def plot_roc_curve(y_true, y_pred_proba, model_name, fold):
+    fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='orange', label=f"ROC curve (AUC = {roc_auc:.2f})")
+    plt.plot([0, 1], [0, 1], linestyle="--", color="blue")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title(f"ROC Curve - {model_name} (Fold {fold})")
+    plt.legend(loc="lower right")
+
+    filename = f"roc_curve_fold_{fold}.png"
+    plt.savefig(filename)
+    wandb.log({f"roc_curve_fold_{fold}": wandb.Image(filename)})
+    plt.close()
+
 
 # Main function
 if __name__ == '__main__':
@@ -178,6 +254,9 @@ if __name__ == '__main__':
     parser.add_argument('--regularization', type=float, help="Regularization parameter (C) for SVM")
     parser.add_argument('--gamma', type=str, help="Gamma parameter for SVM (e.g., 'scale', 'auto')")
     parser.add_argument('--max-iter', type=int, help="Maximum number of iterations for the model")
+    parser.add_argument('--epochs', type=int, default=10, help="Number of epochs for training")
+    parser.add_argument('--max-steps', type=int, help="Maximum number of steps for training")
+
 
 
     args = parser.parse_args()
@@ -191,7 +270,10 @@ if __name__ == '__main__':
         "kernel": args.kernel,
         "C": args.regularization,  # Regularization is mapped to `C`
         "gamma": args.gamma,
-        "max_iter": args.max_iter
+        "max_iter": args.max_iter,
+        "epochs": args.epochs,
+        "max_steps": args.max_steps,
+        "class_weight": "balanced"
     }
     model_params = {k: v for k, v in model_params.items() if v is not None}
 

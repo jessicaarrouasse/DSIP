@@ -21,5 +21,29 @@ CONFIGURATIONS = {
         "gamma": "scale",
         "max_iter": 1000,
         "random_state": 42,
+    },
+    "SVC_POLY": {
+        "model_name": "SVC",
+        "kernel": "poly",
+        "regularization": 1.0,
+        "gamma": "scale",
+        "max_iter": 1000,
+        "random_state": 42,
+    },
+    "SVC_LINEAR": {
+        "model_name": "SVC",
+        "kernel": "linear",
+        "regularization": 1.0,
+        "gamma": "scale",
+        "max_iter": 1000,
+        "random_state": 42,
+    },
+    "SVC_SIGMOID": {
+        "model_name": "SVC",
+        "kernel": "sigmoid",
+        "regularization": 1.0,
+        "gamma": "scale",
+        "max_iter": 1000,
+        "random_state": 42,
     }
 }

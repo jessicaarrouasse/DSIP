@@ -12,10 +12,15 @@ grid_search_params = {
         "min_samples_leaf": [1, 2, 4],
         # "bootstrap": [True, False],
     },
-    "SVC": {
+    # "SVC": {
+    #     "C": [0.1, 1, 10],  # Regularization parameter
+    #     "kernel": ["linear", "poly", "rbf", "sigmoid"],  # Kernel type
+    #     "gamma": ["scale", "auto"],  # Kernel coefficient
+    # },
+     "SVC": {
         "C": [0.1, 1, 10],  # Regularization parameter
-        "kernel": ["linear", "poly", "rbf", "sigmoid"],  # Kernel type
-        "gamma": ["scale", "auto"],  # Kernel coefficient
+        "kernel": ["linear"], 
+        "gamma": ["scale"],
     },
     "KNeighborsClassifier": {
         "n_neighbors": [3, 5, 7, 9],  # Number of neighbors
