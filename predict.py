@@ -28,34 +28,27 @@ class SklearnWrapper:
         preds = self.predict(X)
         return f1_score(y, preds)
 
-def get_data():
-    #df = pd.read_csv(csv_path)
-    #return df
-
+def get_data(gender):
     """Load pre-split test data from gender-specific pickle files."""
-    if gender:
-        file_path = f'data/X_test_y_test_{gender}.pkl'
-    else:
-        file_path = 'data/X_test_y_test.pkl'
+    file_path = f'data/X_test_y_test_{gender}.pkl'
 
     with open(file_path, 'rb') as f:
         X_test, y_test = pickle.load(f)
 
     return X_test, y_test
 
-def load_model(model_name):
-    # load
-    with open(f'models/{model_name}.pkl', 'rb') as f:
+def load_model(model_name, gender):
+    """Load gender-specific model from disk."""
+    with open(f'models/{model_name}_{gender}.pkl', 'rb') as f:
         model = pickle.load(f)
     return model
 
-def predict(model_name):
-    #predict_df = get_data(csv_path) # are these data without labels?
-    X_test, y_test = get_data()
-    model = load_model(model_name)
-    #predictions = model.predict(predict_df)
+def predict_for_gender(model_name, gender):
+    """Make predictions for a specific gender."""
+    X_test, y_test = get_data(gender)
+    model = load_model(model_name, gender)
 
-    print("Predict the model")
+    print(f"\nPredicting for {gender} data using {model_name}")
     y_pred = model.predict(X_test)
     y_scores = model.predict_proba(X_test)[:, 1]
 
@@ -65,21 +58,40 @@ def predict(model_name):
     predictions_df = pd.DataFrame({
         'true_label': y_test,
         'predicted_label': y_pred,
-        'predicted_probability': y_scores
+        'predicted_probability': y_scores,
+        'gender': gender
     })
 
-    # Save predictions
-    os.makedirs('predictions', exist_ok=True)
-    predictions_df.to_csv(f'predictions/{model_name}_predictions.csv', index=False)
+    return predictions_df, metrics
 
-    # Print metrics
-    print(f"\nMetrics for {model_name}:")
-    for metric, value in metrics.items():
+
+def predict(model_name):
+    """Main prediction function that handles predictions for both genders."""
+    # Create predictions directory if it doesn't exist
+    os.makedirs('predictions', exist_ok=True)
+
+    # Get predictions for both genders
+    male_predictions, male_metrics = predict_for_gender(model_name, 'male')
+    female_predictions, female_metrics = predict_for_gender(model_name, 'female')
+
+    # Combine predictions
+    all_predictions = pd.concat([male_predictions, female_predictions], ignore_index=True)
+
+    # Save combined predictions
+    predictions_path = f'predictions/{model_name}_predictions.csv'
+    all_predictions.to_csv(predictions_path, index=False)
+
+    # Print metrics for both genders
+    print(f"\nMetrics for {model_name} (Male):")
+    for metric, value in male_metrics.items():
         print(f"{metric}: {value:.4f}")
 
-    print(f"\nPredictions saved to: predictions/{model_name}_predictions.csv")
-    print(f"ROC curve saved as: {model_name}_roc_curve.png")
-    print(f"Confusion matrix saved as: {model_name}_confusion_matrix.png")
+    print(f"\nMetrics for {model_name} (Female):")
+    for metric, value in female_metrics.items():
+        print(f"{metric}: {value:.4f}")
+
+    print(f"\nPredictions saved to: {predictions_path}")
+    print(f"ROC curves and confusion matrices saved with gender-specific suffixes")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Model Predictor")

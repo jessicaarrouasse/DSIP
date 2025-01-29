@@ -2,6 +2,7 @@ import argparse
 import os
 import pickle
 import numpy as np
+import pandas as pd
 from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.utils.class_weight import compute_class_weight
@@ -25,19 +26,24 @@ class SklearnWrapper:
         return f1_score(y, preds)
 
 
-def get_data():
-    """Load pre-split train and validation data from pickle files."""
-    with open('data/X_train_y_train.pkl', 'rb') as f:
+def get_data(gender):
+    """Load pre-split train and validation data for specific gender from pickle files."""
+    with open(f'data/X_train_y_train_{gender}.pkl', 'rb') as f:
         X_train, y_train = pickle.load(f)
-    with open('data/X_validation_y_validation.pkl', 'rb') as f:
+    with open(f'data/X_validation_y_validation_{gender}.pkl', 'rb') as f:
         X_val, y_val = pickle.load(f)
+
+    if isinstance(X_train, np.ndarray):
+        feature_names = [f'feature_{i}' for i in range(X_train.shape[1])]
+        X_train = pd.DataFrame(X_train, columns=feature_names)
+        X_val = pd.DataFrame(X_val, columns=feature_names)
+
     return X_train, y_train, X_val, y_val
 
-
-def save_model(model, model_name):
-    """Save trained model to disk."""
+def save_model(model, model_name, gender):
+    """Save trained model to disk with gender specification."""
     os.makedirs("models", exist_ok=True)
-    with open(f'models/{model_name}.pkl', 'wb') as f:
+    with open(f'models/{model_name}_{gender}.pkl', 'wb') as f:
         pickle.dump(model, f)
 
 
@@ -55,6 +61,10 @@ def train_model_for_gender(model_name, gender):
     print(f"\nTraining {model_name} model for {gender}")
     print(f"Training data shape: {X_train.shape}, {y_train.shape}")
     print(f"Validation data shape: {X_val.shape}, {y_val.shape}")
+
+    # Get feature names for feature importance analysis
+    feature_names = X_train.columns.tolist() if hasattr(X_train, 'columns') else [f'feature_{i}' for i in
+                                                                                  range(X_train.shape[1])]
 
     # Train selected model
     model_trainers = {
@@ -75,6 +85,32 @@ def train_model_for_gender(model_name, gender):
     # Save the gender-specific model
     save_model(model, model_name, gender)
     return model, val_accuracy
+
+
+def save_feature_importance(importance_results, model_name, gender):
+    """Save feature importance results to disk."""
+    os.makedirs("feature_importance", exist_ok=True)
+
+    # Save built-in importance
+    if 'built_in' in importance_results:
+        importance_results['built_in'].to_csv(
+            f'feature_importance/{model_name}_{gender}_built_in_importance.csv',
+            index=False
+        )
+
+    # Save permutation importance
+    if 'permutation' in importance_results:
+        importance_results['permutation'].to_csv(
+            f'feature_importance/{model_name}_{gender}_permutation_importance.csv',
+            index=False
+        )
+
+    # Save SHAP values in a numpy format
+    if 'shap_values' in importance_results:
+        np.save(
+            f'feature_importance/{model_name}_{gender}_shap_values.npy',
+            importance_results['shap_values']
+        )
 
 def train(model_name):
     """Main training function that trains separate models for each gender."""
@@ -283,34 +319,6 @@ def train_lightgbm(X_train, y_train, X_val, y_val):
     except Exception as e:
         print(f"\nAn error occurred during training: {str(e)}")
         raise
-
-
-def train(model_name):
-    """Main training function."""
-    # Load data
-    X_train, y_train, X_val, y_val = get_data()
-    print(f"Training data shape: {X_train.shape}, {y_train.shape}")
-    print(f"Validation data shape: {X_val.shape}, {y_val.shape}")
-
-    # Train selected model
-    model_trainers = {
-        'naive_bayes': lambda: train_naive_bayes(X_train, y_train),
-        'xgboost': lambda: train_xgboost(X_train, y_train, X_val, y_val),
-        'lightgbm': lambda: train_lightgbm(X_train, y_train, X_val, y_val)
-    }
-
-    if model_name not in model_trainers:
-        raise ValueError(f"Unknown model: {model_name}")
-
-    model = model_trainers[model_name]()
-
-    # Evaluate on validation set
-    val_accuracy = model.score(X_val, y_val)
-    print(f"Validation Accuracy: {val_accuracy:.4f}")
-
-    # Save the model
-    save_model(model, model_name)
-    return model
 
 
 if __name__ == '__main__':

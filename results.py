@@ -13,7 +13,7 @@ def get_data(predictions_file):
     """Load predictions from CSV file."""
     return pd.read_csv(f'predictions/{predictions_file}')
 
-def compute_roc_curve(y_true, y_scores, model_name):
+def compute_roc_curve(y_true, y_scores, model_name, gender):
     #pass
     """
         Olga: compute and plot ROC curve - still not sure that we need this
@@ -36,18 +36,18 @@ def compute_roc_curve(y_true, y_scores, model_name):
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title(f'ROC Curve - {model_name}')
+    plt.title(f'ROC Curve - {model_name} ({gender})')
     plt.legend(loc="lower right")
-    plt.savefig(f'{model_name}_roc_curve.png')
+    plt.savefig(f'{model_name}_{gender}_roc_curve.png')
 
     if wandb.run is not None:
-        wandb.log({"roc_curve": wandb.Image(plt)})
+        wandb.log({f"roc_curve_{gender}": wandb.Image(plt)})
 
     plt.close()
 
     return roc_auc
 
-def generate_confusion_matrix(y_true, y_pred, model_name):
+def generate_confusion_matrix(y_true, y_pred, model_name,gender):
     """
     Olga: generate confusion matrix plot
 
@@ -61,15 +61,15 @@ def generate_confusion_matrix(y_true, y_pred, model_name):
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=['Negative', 'Positive'],
                 yticklabels=['Negative', 'Positive'])
-    plt.title(f'Confusion Matrix - {model_name}')
+    plt.title(f'Confusion Matrix - {model_name} ({gender})')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     plt.tight_layout()
-    plt.savefig(f'{model_name}_confusion_matrix.png')
+    plt.savefig(f'{model_name}_{gender}_confusion_matrix.png')
 
     # Log to WandB
     if wandb.run is not None:
-        wandb.log({"confusion_matrix": wandb.Image(plt)})
+        wandb.log({f"confusion_matrix_{gender}": wandb.Image(plt)})
 
     plt.close()
 
@@ -108,7 +108,32 @@ def calculate_metrics(y_true, y_pred, y_scores):
     return metrics
 
 
+def analyze_gender_results(predictions_df, model_name, gender):
+    """Analyze results for a specific gender."""
+    gender_df = predictions_df[predictions_df['gender'] == gender]
+
+    y_true = gender_df['true_label']
+    y_pred = gender_df['predicted_label']
+    y_scores = gender_df['predicted_probability']
+
+    # Compute ROC curve
+    roc_auc = compute_roc_curve(y_true, y_scores, model_name, gender)
+
+    # Generate confusion matrix
+    generate_confusion_matrix(y_true, y_pred, model_name, gender)
+
+    # Calculate metrics
+    metrics = calculate_metrics(y_true, y_pred, y_scores)
+
+    # Log gender-specific metrics to WandB
+    if wandb.run is not None:
+        wandb.log({f"{metric}_{gender}": value for metric, value in metrics.items()})
+
+    return metrics
+
+
 def results(model_name):
+    """Generate results for both gender models."""
     # Initialize WandB run
     wandb.init(
         project="ad-click-prediction",
@@ -116,32 +141,43 @@ def results(model_name):
         config={"model_type": model_name}
     )
 
+    # Load predictions
     predictions_df = get_data(f"{model_name}_predictions.csv")
 
-    # Olga: Extract true labels and predictions
-    y_true = predictions_df['true_label']
-    y_pred = predictions_df['predicted_label']
-    y_scores = predictions_df['predicted_probability']
+    # Analyze results for each gender
+    male_metrics = analyze_gender_results(predictions_df, model_name, 'male')
+    female_metrics = analyze_gender_results(predictions_df, model_name, 'female')
 
-    # Compute ROC curve
-    roc_auc = compute_roc_curve(y_true, y_scores, model_name) #Olga: call compute_roc_curve method
+    # Calculate and save combined metrics
+    combined_metrics = calculate_metrics(
+        predictions_df['true_label'],
+        predictions_df['predicted_label'],
+        predictions_df['predicted_probability']
+    )
 
-    # Generate confusion matrix
-    generate_confusion_matrix(y_true, y_pred, model_name) # Olga: call generate_confusion_matrix method
-
-    # Calculate metrics
-    metrics = calculate_metrics(y_true, y_pred, y_scores) # Olga: call calculate_metrics method
+    # Create comprehensive metrics DataFrame
+    metrics_df = pd.DataFrame({
+        'Male': male_metrics,
+        'Female': female_metrics,
+        'Combined': combined_metrics
+    })
 
     # Save metrics to CSV
-    metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Value'])
     metrics_df.to_csv(f'{model_name}_metrics.csv')
 
-    # Print metrics
-    print(f"Metrics for {model_name}:")
-    for metric, value in metrics.items():
+    # Print results
+    print(f"\nMetrics for {model_name}:")
+    print("\nMale Model Metrics:")
+    for metric, value in male_metrics.items():
         print(f"{metric}: {value:.4f}")
 
-    #compute_roc_curve(predictions) # Jessica's line - I just commented this
+    print("\nFemale Model Metrics:")
+    for metric, value in female_metrics.items():
+        print(f"{metric}: {value:.4f}")
+
+    print("\nCombined Metrics:")
+    for metric, value in combined_metrics.items():
+        print(f"{metric}: {value:.4f}")
 
     # Close WandB run
     wandb.finish()

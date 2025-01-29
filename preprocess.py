@@ -375,12 +375,32 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
    df = df.copy()
    logging.info("Starting feature extraction.")
 
+   # Modify gender encoding to ensure it's numeric
+   df['gender_binary'] = pd.Categorical(df['gender']).codes
+   # Map unknown (-1) to NaN to handle it properly
+   df.loc[df['gender_binary'] == -1, 'gender_binary'] = np.nan
+
+   logging.info(f"Gender encoding distribution:\n{df['gender_binary'].value_counts(dropna=False)}")
+
    # Initialize CTRFeatureExtractor
    ctr_extractor = CTRFeatureExtractor()
+
+   # Gender encoding with debugging - do this before dropping the gender column
+   df['gender_binary'] = df['gender'].map({'Male': 0, 'Female': 1, None: -1})
+   logging.info(f"Gender_binary distribution after encoding:\n{df['gender_binary'].value_counts()}")
+
+   # Log any unexpected gender values
+   unexpected_gender = df[~df['gender'].isin(['Male', 'Female', None])]['gender'].unique()
+   if len(unexpected_gender) > 0:
+      logging.warning(f"Unexpected gender values found: {unexpected_gender}")
+
+   # Now drop the original gender column after we've created gender_binary
+   df = df.drop('gender', axis=1)
 
    # 1. Add CTR-specific features
    df = ctr_extractor.extract_features(df)
 
+   # Rest of the function remains the same...
    # 2. Time-Based Features
    df['DateTime'] = pd.to_datetime(df['DateTime'])
    df['hour'] = df['DateTime'].dt.hour
@@ -407,10 +427,6 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
       'Early Night': 4
    }
    df['time_period'] = df['time_period'].map(time_period_map)
-
-   # 3. User features
-   df['gender_binary'] = df['gender'].map({'Male': 0, 'Female': 1, None: -1})
-   df = df.drop('gender', axis=1)
 
    # 4. User Behavior Features
    user_session_count = df.groupby('user_id')['session_id'].nunique().rename('session_count')
@@ -443,11 +459,8 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
 
    logging.info("Feature extraction completed.")
 
-   # Update selected_features to include CTR-specific features
-   all_features = selected_features + [f for f in ctr_extractor.get_feature_names() if f not in selected_features]
-
    # Extract features and labels
-   X = df[all_features].to_numpy()
+   X = df[selected_features].to_numpy()
    y = df['is_click'].to_numpy()
 
    # Feature scaling
@@ -456,6 +469,10 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
       X = scaler.fit_transform(X)
    else:
       X = scaler.transform(X)
+
+   if 'gender_binary' in selected_features:
+      gender_idx = selected_features.index('gender_binary')
+      logging.info(f"Gender values in final features: {np.unique(X[:, gender_idx], return_counts=True)}")
 
    return X, y, scaler
 
@@ -514,7 +531,7 @@ def main(csv_path):
       'time_period',
 
       # User features
-      'gender_binary', # then I removed it
+      'gender_binary',  # We'll handle this separately
       'age_level',
       'user_depth',
       'avg_user_depth',
@@ -538,20 +555,20 @@ def main(csv_path):
       'is_developed_city'
    ]
 
-   # Add correlation analysis here
+   # Add correlation analysis
    corr_matrix, heatmap = analyze_feature_correlations(df, selected_features)
-
-   # Save correlation outputs
    save_pickle(corr_matrix, "correlation_matrix.pkl")
    heatmap.savefig('data/correlation_heatmap.png')
    plt.close()
 
-   # 3.3 Feature Extraction for Training
+   # 3.3 Feature Extraction for all sets
+   logging.info("Extracting features for all datasets...")
    X_train, y_train, scaler = feature_extraction(train_data, selected_features)
+   X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats, scaler)
+   X_validation, y_validation, _ = feature_extraction(validation_data, selected_features, train_stats, scaler)
 
-   # 3.4 Feature Extraction for Test/Validation (using precomputed statistics)
-   X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats)
-   X_validation, y_validation, _ = feature_extraction(validation_data, selected_features, train_stats, scaler=scaler)
+   # Get gender index
+   gender_idx = selected_features.index('gender_binary')
 
    # Drop missing data
    train_mask = ~np.isnan(X_train).any(axis=1)
@@ -566,53 +583,79 @@ def main(csv_path):
    X_test = X_test[test_mask]
    y_test = y_test[test_mask]
 
-   # Get gender index and split datasets
-   gender_idx = selected_features.index('gender_binary')
+   # Split by gender using gender_binary values
+   # For male: gender_binary = 0.0 (before standardization)
+   # For female: gender_binary = 1.0 (before standardization)
+   male_mask_train = (X_train[:, gender_idx] < 0)  # After standardization, male values become negative
+   female_mask_train = (X_train[:, gender_idx] > 0)  # After standardization, female values become positive
 
-   # Split datasets by gender
-   # Training set
-   male_mask_train = X_train[:, gender_idx] == 0
-   female_mask_train = X_train[:, gender_idx] == 1
+   male_mask_val = (X_validation[:, gender_idx] < 0)
+   female_mask_val = (X_validation[:, gender_idx] > 0)
 
-   X_train_male = np.delete(X_train[male_mask_train], gender_idx, axis=1)
+   male_mask_test = (X_test[:, gender_idx] < 0)
+   female_mask_test = (X_test[:, gender_idx] > 0)
+
+   # Log the counts
+   logging.info(f"Male samples in training: {np.sum(male_mask_train)}")
+   logging.info(f"Female samples in training: {np.sum(female_mask_train)}")
+   logging.info(f"Male samples in validation: {np.sum(male_mask_val)}")
+   logging.info(f"Female samples in validation: {np.sum(female_mask_val)}")
+   logging.info(f"Male samples in test: {np.sum(male_mask_test)}")
+   logging.info(f"Female samples in test: {np.sum(female_mask_test)}")
+
+   # Split the datasets by gender
+   X_train_male = X_train[male_mask_train]
    y_train_male = y_train[male_mask_train]
-   X_train_female = np.delete(X_train[female_mask_train], gender_idx, axis=1)
+   X_train_female = X_train[female_mask_train]
    y_train_female = y_train[female_mask_train]
 
-   # Validation set
-   male_mask_val = X_validation[:, gender_idx] == 0
-   female_mask_val = X_validation[:, gender_idx] == 1
-
-   X_val_male = np.delete(X_validation[male_mask_val], gender_idx, axis=1)
+   X_val_male = X_validation[male_mask_val]
    y_val_male = y_validation[male_mask_val]
-   X_val_female = np.delete(X_validation[female_mask_val], gender_idx, axis=1)
+   X_val_female = X_validation[female_mask_val]
    y_val_female = y_validation[female_mask_val]
 
-   # Test set
-   male_mask_test = X_test[:, gender_idx] == 0
-   female_mask_test = X_test[:, gender_idx] == 1
-
-   X_test_male = np.delete(X_test[male_mask_test], gender_idx, axis=1)
+   X_test_male = X_test[male_mask_test]
    y_test_male = y_test[male_mask_test]
-   X_test_female = np.delete(X_test[female_mask_test], gender_idx, axis=1)
+   X_test_female = X_test[female_mask_test]
    y_test_female = y_test[female_mask_test]
 
+   # Remove gender column after splitting
+   X_train_male = np.delete(X_train_male, gender_idx, axis=1)
+   X_train_female = np.delete(X_train_female, gender_idx, axis=1)
+   X_val_male = np.delete(X_val_male, gender_idx, axis=1)
+   X_val_female = np.delete(X_val_female, gender_idx, axis=1)
+   X_test_male = np.delete(X_test_male, gender_idx, axis=1)
+   X_test_female = np.delete(X_test_female, gender_idx, axis=1)
+
+   logging.info("Starting dataset balancing...")
    # Apply balancing separately for male and female datasets
-   X_train_male_balanced, y_train_male_balanced = balance_dataset(
-      X_train_male,
-      y_train_male,
-      majority_ratio=2.0,
-      random_state=42
-   )
+   if len(X_train_male) > 0:
+      logging.info(f"Male dataset shape before balancing: {X_train_male.shape}")
+      X_train_male_balanced, y_train_male_balanced = balance_dataset(
+         X_train_male,
+         y_train_male,
+         majority_ratio=2.0,
+         random_state=42
+      )
+      logging.info(f"Male dataset shape after balancing: {X_train_male_balanced.shape}")
+   else:
+      logging.warning("No male samples found in training data")
+      X_train_male_balanced, y_train_male_balanced = np.array([]), np.array([])
 
-   X_train_female_balanced, y_train_female_balanced = balance_dataset(
-      X_train_female,
-      y_train_female,
-      majority_ratio=2.0,
-      random_state=42
-   )
+   if len(X_train_female) > 0:
+      logging.info(f"Female dataset shape before balancing: {X_train_female.shape}")
+      X_train_female_balanced, y_train_female_balanced = balance_dataset(
+         X_train_female,
+         y_train_female,
+         majority_ratio=2.0,
+         random_state=42
+      )
+      logging.info(f"Female dataset shape after balancing: {X_train_female_balanced.shape}")
+   else:
+      logging.warning("No female samples found in training data")
+      X_train_female_balanced, y_train_female_balanced = np.array([]), np.array([])
 
-   # Save gender-specific datasets
+   # Save the processed datasets
    save_pickle((X_train_male_balanced, y_train_male_balanced), "X_train_y_train_male.pkl")
    save_pickle((X_train_female_balanced, y_train_female_balanced), "X_train_y_train_female.pkl")
    save_pickle((X_test_male, y_test_male), "X_test_y_test_male.pkl")
@@ -620,21 +663,22 @@ def main(csv_path):
    save_pickle((X_val_male, y_val_male), "X_validation_y_validation_male.pkl")
    save_pickle((X_val_female, y_val_female), "X_validation_y_validation_female.pkl")
 
-   # Also save the combined balanced datasets for comparison
-   save_pickle((np.vstack((X_train_male_balanced, X_train_female_balanced)),
-                np.hstack((y_train_male_balanced, y_train_female_balanced))),
-               "X_train_y_train_combined_balanced.pkl")
+   # Save combined balanced datasets if both male and female datasets exist
+   if len(X_train_male_balanced) > 0 and len(X_train_female_balanced) > 0:
+      save_pickle((np.vstack((X_train_male_balanced, X_train_female_balanced)),
+                   np.hstack((y_train_male_balanced, y_train_female_balanced))),
+                  "X_train_y_train_combined_balanced.pkl")
 
-   # Save the feature names (without gender_binary) for reference
+   # Save feature names (without gender_binary since it's removed)
    selected_features.remove('gender_binary')
    save_pickle(selected_features, "feature_names.pkl")
-
+   logging.info("Processing completed successfully")
 
 def balance_dataset(X: np.ndarray, y: np.ndarray,
                     majority_ratio: float = 5.0,
                     random_state: int = 42) -> Tuple[np.ndarray, np.ndarray]:
    """
-   Two-step balancing process:
+   Two-step balancing process with input validation:
    1. Cut down majority class to a specified ratio
    2. Apply Tomek Links to clean decision boundary
 
@@ -649,8 +693,29 @@ def balance_dataset(X: np.ndarray, y: np.ndarray,
    """
    logging.info("Starting two-step balancing process...")
 
+   # Input validation
+   if X.shape[0] == 0 or y.shape[0] == 0:
+      raise ValueError("Empty input arrays provided to balance_dataset")
+
+   if X.shape[0] != y.shape[0]:
+      raise ValueError(f"Mismatched shapes: X has {X.shape[0]} samples but y has {y.shape[0]} samples")
+
+   # Check for NaN values
+   if np.isnan(X).any() or np.isnan(y).any():
+      logging.warning("Input contains NaN values. Removing samples with NaN...")
+      valid_mask = ~(np.isnan(X).any(axis=1) | np.isnan(y))
+      X = X[valid_mask]
+      y = y[valid_mask]
+
+      if X.shape[0] == 0:
+         raise ValueError("No valid samples remaining after NaN removal")
+
    # Get initial class distribution
    unique_classes, class_counts = np.unique(y, return_counts=True)
+
+   if len(unique_classes) < 2:
+      raise ValueError(f"Need at least 2 classes for balancing, found {len(unique_classes)} classes")
+
    initial_dist = dict(zip(unique_classes, class_counts))
    logging.info(f"Initial class distribution: {initial_dist}")
 
