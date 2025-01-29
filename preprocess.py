@@ -7,6 +7,73 @@ from typing import Dict, Tuple, List, Any
 import logging
 import pickle
 from sklearn.preprocessing import StandardScaler
+from imblearn.over_sampling import SMOTE
+import seaborn as sns
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from imblearn.under_sampling import TomekLinks
+
+
+class CTRFeatureExtractor:
+   """Feature extractor for CTR-specific features to be added to preprocess.py"""
+
+   def __init__(self):
+      self.scaler = StandardScaler()
+
+   def extract_features(self, df):
+      """Extract CTR-specific features based on analysis insights"""
+      df = df.copy()
+
+      # Time-based features
+      if 'DateTime' in df.columns:
+         df['hour'] = df['DateTime'].dt.hour
+         df['day_of_week'] = df['DateTime'].dt.dayofweek
+         df['is_peak_hour'] = df['hour'].isin([1, 2])
+         df['is_monday'] = df['day_of_week'] == 0
+         df['is_night'] = (df['hour'] >= 0) & (df['hour'] <= 4)
+
+      # User behavior features
+      if 'user_depth' in df.columns:
+         df['is_immediate_action'] = df['user_depth'] == 1
+         df['is_researcher'] = df['user_depth'] == 3
+
+      # Age-based interaction features
+      if 'age_level' in df.columns and 'user_depth' in df.columns:
+         df['is_young_researcher'] = (df['age_level'] == 0) & (df['user_depth'] == 3)
+         df['is_young_immediate'] = (df['age_level'] == 0) & (df['user_depth'] == 1)
+
+      # Product features
+      if 'product_category_1' in df.columns:
+         df['is_category_3'] = df['product_category_1'] == 3
+      if 'product' in df.columns:
+         df['is_product_J'] = df['product'] == 'J'
+
+      # Campaign features
+      if 'campaign_id' in df.columns:
+         df['is_top_campaign'] = df['campaign_id'] == 405490
+      if 'webpage_id' in df.columns:
+         df['is_top_webpage'] = df['webpage_id'] == 60305
+
+      # User group features
+      if 'user_group_id' in df.columns:
+         df['is_high_ctr_group'] = df['user_group_id'].isin([0, 7, 8])
+
+      # City development features
+      if 'city_development_index' in df.columns:
+         df['is_developed_city'] = df['city_development_index'] >= 0.8
+
+      return df
+
+   def get_feature_names(self):
+      """Return list of feature names added by this extractor"""
+      return [
+         'hour', 'day_of_week', 'is_peak_hour', 'is_monday', 'is_night',
+         'is_immediate_action', 'is_researcher', 'is_young_researcher',
+         'is_young_immediate', 'is_category_3', 'is_product_J',
+         'is_top_campaign', 'is_top_webpage', 'is_high_ctr_group',
+         'is_developed_city'
+      ]
 
 # Set up logging configuration
 logging.basicConfig(
@@ -138,6 +205,85 @@ def iterative_imputation(df: pd.DataFrame) -> pd.DataFrame:
       changes = previous_nulls - current_nulls
    return result
 
+
+def analyze_feature_correlations(df: pd.DataFrame, selected_features: List[str]) -> Tuple[pd.DataFrame, plt.Figure]:
+   """
+   Analyze correlations between features and is_click target variable.
+
+   Args:
+       df (pd.DataFrame): Input DataFrame containing features and is_click
+       selected_features (List[str]): List of feature names to analyze
+
+   Returns:
+       Tuple[pd.DataFrame, plt.Figure]: Correlation matrix and correlation heatmap
+   """
+   # Initialize CTRFeatureExtractor and extract features
+   ctr_extractor = CTRFeatureExtractor()
+   df = ctr_extractor.extract_features(df)
+
+   # Process DateTime features
+   df['DateTime'] = pd.to_datetime(df['DateTime'])
+   df['hour'] = df['DateTime'].dt.hour
+   df['day_of_week'] = df['DateTime'].dt.dayofweek
+   df['is_weekend'] = df['day_of_week'].apply(lambda x: 1 if x >= 5 else 0)
+
+   # Time of day feature
+   bins = [-1, 5, 11, 17, 21, 24]
+   labels = ['Late Night', 'Morning', 'Afternoon', 'Evening', 'Early Night']
+   df['time_period'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False)
+
+   # Holiday feature
+   df['is_holiday'] = ((df['DateTime'].dt.month == 7) & (df['DateTime'].dt.day == 4)).astype(int)
+
+   # Encode categorical variables
+   df['gender_binary'] = df['gender'].map({'Male': 0, 'Female': 1, None: -1})
+   time_period_map = {
+      'Late Night': 0,
+      'Morning': 1,
+      'Afternoon': 2,
+      'Evening': 3,
+      'Early Night': 4
+   }
+   df['time_period'] = df['time_period'].map(time_period_map)
+
+   # Add CTR features
+   df['campaign_ctr'] = df.groupby('campaign_id')['is_click'].transform('mean')
+   df['product_popularity'] = df.groupby('product')['is_click'].transform('mean')
+   df['product_category_popularity'] = df.groupby('product_category_1')['is_click'].transform('mean')
+   df['webpage_ctr'] = df.groupby('webpage_id')['is_click'].transform('mean')
+
+   # Add interaction features
+   df['engagement_city'] = df['user_depth'] * df['city_development_index']
+   df['campaign_product_ctr'] = df['campaign_ctr'] * df['product_popularity']
+   df['product_category_1_age_level'] = df['product_category_1'] * df['age_level']
+
+   # Calculate user session statistics
+   df['session_count'] = df.groupby('user_id')['session_id'].transform('nunique')
+   df['avg_user_depth'] = df.groupby('user_id')['user_depth'].transform('mean')
+
+   # Select features for correlation analysis
+   features_to_analyze = selected_features + ['is_click']
+   correlation_df = df[features_to_analyze].copy()
+
+   # Calculate correlation matrix
+   correlation_matrix = correlation_df.corr()
+
+   # Create correlation heatmap
+   plt.figure(figsize=(15, 12))
+   sns.heatmap(correlation_matrix,
+               annot=True,
+               cmap='coolwarm',
+               center=0,
+               fmt='.2f',
+               square=True,
+               cbar_kws={"shrink": .5})
+   plt.title('Feature Correlations with Is_Click')
+   plt.xticks(rotation=45, ha='right')
+   plt.yticks(rotation=0)
+   plt.tight_layout()
+
+   return correlation_matrix, plt.gcf()
+
 def clean_data(df):
    clean_df = df.drop_duplicates()
    clean_df = df.dropna(subset=['is_click'])
@@ -213,39 +359,46 @@ def compute_train_stats(train_data: pd.DataFrame) -> dict:
    logging.info("Statistics computation completed.")
    return stats
 
-def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_stats: dict = None, scaler: StandardScaler = None) -> Tuple[np.ndarray, np.ndarray, StandardScaler]:
+
+def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_stats: dict = None,
+                       scaler: StandardScaler = None) -> Tuple[np.ndarray, np.ndarray, StandardScaler]:
    '''
    The function extracts features and labels from the input DataFrame.
    Args:
-      df (pd.DataFrame): The DataFrame containing the data.
-      selected_features (List[str]): The list of selected features to extract.
-      train_stats (dict): A dictionary containing precomputed statistics for the training set.
-      scaler (StandardScaler): An optional scaler object for feature scaling. If None, a new scaler will be created.
+       df (pd.DataFrame): The DataFrame containing the data.
+       selected_features (List[str]): The list of selected features to extract.
+       train_stats (dict): A dictionary containing precomputed statistics for the training set.
+       scaler (StandardScaler): An optional scaler object for feature scaling. If None, a new scaler will be created.
    Returns:
-      Tuple[np.ndarray, np.ndarray, StandardScaler]: A tuple containing the features (X), labels (y), and the scaler object.
+       Tuple[np.ndarray, np.ndarray, StandardScaler]: A tuple containing the features (X), labels (y), and the scaler object.
    '''
    df = df.copy()
    logging.info("Starting feature extraction.")
-   # 1. Time-Based Features
+
+   # Initialize CTRFeatureExtractor
+   ctr_extractor = CTRFeatureExtractor()
+
+   # 1. Add CTR-specific features
+   df = ctr_extractor.extract_features(df)
+
+   # 2. Time-Based Features
    df['DateTime'] = pd.to_datetime(df['DateTime'])
    df['hour'] = df['DateTime'].dt.hour
    df['day_of_week'] = df['DateTime'].dt.dayofweek
    df['day_name'] = df['DateTime'].dt.day_name()
-   df['is_weekend'] = df['day_of_week'].apply(lambda x: 1 if x >= 5 else 0) # should we map to -1/1 instead of 0/1? depend on the model?
-   # Time of day feature - Define bins and labels
+   df['is_weekend'] = df['day_of_week'].apply(lambda x: 1 if x >= 5 else 0)
+
+   # Time of day feature
    bins = [-1, 5, 11, 17, 21, 24]
    labels = ['Late Night', 'Morning', 'Afternoon', 'Evening', 'Early Night']
-   # Bin the hours into time periods
    df['time_period'] = pd.cut(df['hour'], bins=bins, labels=labels, right=False)
+
    # Holiday feature
-   # a holiday feature for July 4th
    df['is_holiday'] = (df['DateTime'].dt.month == 7) & (df['DateTime'].dt.day == 4)
-   # Convert boolean to 0/1
-   df['is_holiday'] = df['is_holiday'].astype(int) #should we map to -1/1? depened on model
-   # drop day_name since it's similar to day_of_week feature (day_of_week is numeric and keeps the ordinal relationship)
+   df['is_holiday'] = df['is_holiday'].astype(int)
+
+   # Drop day_name and encode time_period
    df = df.drop('day_name', axis=1)
-   # Encode time_period categorical feature for linear models
-   # Map time periods to integers
    time_period_map = {
       'Late Night': 0,
       'Morning': 1,
@@ -254,51 +407,56 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
       'Early Night': 4
    }
    df['time_period'] = df['time_period'].map(time_period_map)
-   # 2. user features - demographics features
-   df['gender_binary'] = df['gender'].map({'Male': 0, 'Female': 1, None: -1}) #should we handle null here? if we use XGBoost, LightGBM we can skip handle nulls
+
+   # 3. User features
+   df['gender_binary'] = df['gender'].map({'Male': 0, 'Female': 1, None: -1})
    df = df.drop('gender', axis=1)
-   # 3. User Behavior Features: Aggregate user-level data to capture engagement trends - lets make sure we dont have lekage here when spliting the data to train/test
+
+   # 4. User Behavior Features
    user_session_count = df.groupby('user_id')['session_id'].nunique().rename('session_count')
    df = df.merge(user_session_count, on='user_id', how='left')
    avg_user_depth = df.groupby('user_id')['user_depth'].mean().rename('avg_user_depth')
    df = df.merge(avg_user_depth, on='user_id', how='left')
-   # 4. Campaign & Product Features
+
+   # 5. Campaign & Product Features
    if train_stats is not None:
-      # Use precomputed stats for test set or validation set
       campaign_ctr = df['campaign_id'].map(train_stats['campaign_ctr'])
       product_popularity = df['product'].map(train_stats['product_popularity'])
       product_category_popularity = df['product_category_1'].map(train_stats['product_category_popularity'])
       webpage_ctr = df['webpage_id'].map(train_stats['webpage_ctr'])
    else:
-      # Drop rows with NaN in grouping columns before computing stats
       df = df.dropna(subset=['campaign_id', 'product', 'product_category_1', 'webpage_id'])
-      # Compute stats for training set
       campaign_ctr = df.groupby('campaign_id')['is_click'].transform('mean').fillna(0)
       product_popularity = df.groupby('product')['is_click'].transform('mean').fillna(0)
       product_category_popularity = df.groupby('product_category_1')['is_click'].transform('mean').fillna(0)
       webpage_ctr = df.groupby('webpage_id')['is_click'].transform('mean').fillna(0)
-    
+
    df['campaign_ctr'] = campaign_ctr
    df['product_popularity'] = product_popularity
    df['product_category_popularity'] = product_category_popularity
    df['webpage_ctr'] = webpage_ctr
-   # 5. Interaction Features
+
+   # 6. Interaction Features
    df['engagement_city'] = df['user_depth'] * df['city_development_index']
    df['campaign_product_ctr'] = df['campaign_ctr'] * df['product_popularity']
-   df['product_category_1_age_level'] = df['product_category_1'] * df['age_level'] 
-   
+   df['product_category_1_age_level'] = df['product_category_1'] * df['age_level']
+
    logging.info("Feature extraction completed.")
-   # Extract selected features and labels
-   X = df[selected_features].to_numpy()
+
+   # Update selected_features to include CTR-specific features
+   all_features = selected_features + [f for f in ctr_extractor.get_feature_names() if f not in selected_features]
+
+   # Extract features and labels
+   X = df[all_features].to_numpy()
    y = df['is_click'].to_numpy()
-   
+
    # Feature scaling
    if scaler is None:
-      scaler = StandardScaler()  # Create a new scaler if not provided
-      X = scaler.fit_transform(X)  # Fit and transform for training data
+      scaler = StandardScaler()
+      X = scaler.fit_transform(X)
    else:
-      X = scaler.transform(X)  # Transform for test/validation data
-   
+      X = scaler.transform(X)
+
    return X, y, scaler
 
 def save_dataframe(df, filename):
@@ -318,32 +476,219 @@ def save_pickle(data, filename):
         pickle.dump(data, f)
     print(f"Saved {filename}")
 
+
 def main(csv_path):
    # 1. Clean Data
    df = parse(csv_path)
    df = clean_data(df)
+
    # 2. Split Data
    train_data, test_data, validation_data = split_data(df)
+
    # Save the datasets
    save_dataframe(train_data, "train.csv")
    save_dataframe(test_data, "test.csv")
    save_dataframe(validation_data, "validation.csv")
    print("Train, test and validation datasets saved")
+
    # 3. Feature Extraction
    # 3.1 Compute Statistics on the Training Set
    train_stats = compute_train_stats(train_data)
-   # 3.2 Select features - TODO: consider to move to consts
-   selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity', 'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count', 'product_category_1_age_level']
+
+   # 3.2 Define comprehensive feature list
+   selected_features = [
+      # Original features
+      'campaign_product_ctr',
+      'webpage_ctr',
+      'product_category_popularity',
+      'product_popularity',
+      'var_1',
+      'is_weekend',
+      'is_holiday',
+      'session_count',
+      'product_category_1_age_level',
+
+      # Time-based features
+      'hour',
+      'day_of_week',
+      'time_period',
+
+      # User features
+      'gender_binary', # then I removed it
+      'age_level',
+      'user_depth',
+      'avg_user_depth',
+
+      # Location features
+      'city_development_index',
+
+      # Engagement features
+      'engagement_city',
+
+      # CTR-specific features from CTRFeatureExtractor
+      'is_peak_hour',
+      'is_night',
+      'is_immediate_action',
+      'is_researcher',
+      'is_young_researcher',
+      'is_category_3',
+      'is_top_campaign',
+      'is_top_webpage',
+      'is_high_ctr_group',
+      'is_developed_city'
+   ]
+
+   # Add correlation analysis here
+   corr_matrix, heatmap = analyze_feature_correlations(df, selected_features)
+
+   # Save correlation outputs
+   save_pickle(corr_matrix, "correlation_matrix.pkl")
+   heatmap.savefig('data/correlation_heatmap.png')
+   plt.close()
+
    # 3.3 Feature Extraction for Training
    X_train, y_train, scaler = feature_extraction(train_data, selected_features)
+
    # 3.4 Feature Extraction for Test/Validation (using precomputed statistics)
    X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats)
    X_validation, y_validation, _ = feature_extraction(validation_data, selected_features, train_stats, scaler=scaler)
-   # Save the features and labels as pickle files
-   save_pickle((X_train, y_train), "X_train_y_train.pkl")
-   save_pickle((X_test, y_test), "X_test_y_test.pkl")
-   save_pickle((X_validation, y_validation), "X_validation_y_validation.pkl")
-   
+
+   # Drop missing data
+   train_mask = ~np.isnan(X_train).any(axis=1)
+   X_train = X_train[train_mask]
+   y_train = y_train[train_mask]
+
+   val_mask = ~np.isnan(X_validation).any(axis=1)
+   X_validation = X_validation[val_mask]
+   y_validation = y_validation[val_mask]
+
+   test_mask = ~np.isnan(X_test).any(axis=1)
+   X_test = X_test[test_mask]
+   y_test = y_test[test_mask]
+
+   # Get gender index and split datasets
+   gender_idx = selected_features.index('gender_binary')
+
+   # Split datasets by gender
+   # Training set
+   male_mask_train = X_train[:, gender_idx] == 0
+   female_mask_train = X_train[:, gender_idx] == 1
+
+   X_train_male = np.delete(X_train[male_mask_train], gender_idx, axis=1)
+   y_train_male = y_train[male_mask_train]
+   X_train_female = np.delete(X_train[female_mask_train], gender_idx, axis=1)
+   y_train_female = y_train[female_mask_train]
+
+   # Validation set
+   male_mask_val = X_validation[:, gender_idx] == 0
+   female_mask_val = X_validation[:, gender_idx] == 1
+
+   X_val_male = np.delete(X_validation[male_mask_val], gender_idx, axis=1)
+   y_val_male = y_validation[male_mask_val]
+   X_val_female = np.delete(X_validation[female_mask_val], gender_idx, axis=1)
+   y_val_female = y_validation[female_mask_val]
+
+   # Test set
+   male_mask_test = X_test[:, gender_idx] == 0
+   female_mask_test = X_test[:, gender_idx] == 1
+
+   X_test_male = np.delete(X_test[male_mask_test], gender_idx, axis=1)
+   y_test_male = y_test[male_mask_test]
+   X_test_female = np.delete(X_test[female_mask_test], gender_idx, axis=1)
+   y_test_female = y_test[female_mask_test]
+
+   # Apply balancing separately for male and female datasets
+   X_train_male_balanced, y_train_male_balanced = balance_dataset(
+      X_train_male,
+      y_train_male,
+      majority_ratio=2.0,
+      random_state=42
+   )
+
+   X_train_female_balanced, y_train_female_balanced = balance_dataset(
+      X_train_female,
+      y_train_female,
+      majority_ratio=2.0,
+      random_state=42
+   )
+
+   # Save gender-specific datasets
+   save_pickle((X_train_male_balanced, y_train_male_balanced), "X_train_y_train_male.pkl")
+   save_pickle((X_train_female_balanced, y_train_female_balanced), "X_train_y_train_female.pkl")
+   save_pickle((X_test_male, y_test_male), "X_test_y_test_male.pkl")
+   save_pickle((X_test_female, y_test_female), "X_test_y_test_female.pkl")
+   save_pickle((X_val_male, y_val_male), "X_validation_y_validation_male.pkl")
+   save_pickle((X_val_female, y_val_female), "X_validation_y_validation_female.pkl")
+
+   # Also save the combined balanced datasets for comparison
+   save_pickle((np.vstack((X_train_male_balanced, X_train_female_balanced)),
+                np.hstack((y_train_male_balanced, y_train_female_balanced))),
+               "X_train_y_train_combined_balanced.pkl")
+
+   # Save the feature names (without gender_binary) for reference
+   selected_features.remove('gender_binary')
+   save_pickle(selected_features, "feature_names.pkl")
+
+
+def balance_dataset(X: np.ndarray, y: np.ndarray,
+                    majority_ratio: float = 5.0,
+                    random_state: int = 42) -> Tuple[np.ndarray, np.ndarray]:
+   """
+   Two-step balancing process:
+   1. Cut down majority class to a specified ratio
+   2. Apply Tomek Links to clean decision boundary
+
+   Args:
+       X (np.ndarray): Feature matrix
+       y (np.ndarray): Target labels
+       majority_ratio (float): Desired ratio of majority to minority class after cutting
+       random_state (int): Random state for reproducibility
+
+   Returns:
+       Tuple[np.ndarray, np.ndarray]: Balanced features and labels
+   """
+   logging.info("Starting two-step balancing process...")
+
+   # Get initial class distribution
+   unique_classes, class_counts = np.unique(y, return_counts=True)
+   initial_dist = dict(zip(unique_classes, class_counts))
+   logging.info(f"Initial class distribution: {initial_dist}")
+
+   # Step 1: Cut majority class
+   majority_class = max(initial_dist, key=initial_dist.get)
+   minority_class = min(initial_dist, key=initial_dist.get)
+   minority_count = initial_dist[minority_class]
+   desired_majority_count = int(minority_count * majority_ratio)
+
+   majority_indices = np.where(y == majority_class)[0]
+   minority_indices = np.where(y == minority_class)[0]
+
+   np.random.seed(random_state)
+   selected_majority_indices = np.random.choice(
+      majority_indices,
+      size=desired_majority_count,
+      replace=False
+   )
+
+   selected_indices = np.concatenate([selected_majority_indices, minority_indices])
+   X_cut = X[selected_indices]
+   y_cut = y[selected_indices]
+
+   cut_dist = dict(zip(*np.unique(y_cut, return_counts=True)))
+   logging.info(f"Class distribution after cutting: {cut_dist}")
+
+   # Step 2: Apply Tomek Links
+   try:
+      tomek = TomekLinks(sampling_strategy='majority')
+      X_cleaned, y_cleaned = tomek.fit_resample(X_cut, y_cut)
+      final_dist = dict(zip(*np.unique(y_cleaned, return_counts=True)))
+      logging.info(f"Final class distribution after Tomek Links: {final_dist}")
+      return X_cleaned, y_cleaned
+   except ValueError as e:
+      logging.error(f"Error applying Tomek Links: {str(e)}")
+      logging.warning("Returning cut data without Tomek Links")
+      return X_cut, y_cut
+
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()

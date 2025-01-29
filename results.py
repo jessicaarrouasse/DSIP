@@ -1,8 +1,17 @@
 import argparse
 import pandas as pd
 import numpy as np
-from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report
+from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report, balanced_accuracy_score, f1_score
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+from constants import NAIVE_BAYES, XGBOOST, LIGHTGBM
+import wandb
 
+def get_data(predictions_file):
+    """Load predictions from CSV file."""
+    return pd.read_csv(f'predictions/{predictions_file}')
 
 def compute_roc_curve(y_true, y_scores, model_name):
     #pass
@@ -30,10 +39,13 @@ def compute_roc_curve(y_true, y_scores, model_name):
     plt.title(f'ROC Curve - {model_name}')
     plt.legend(loc="lower right")
     plt.savefig(f'{model_name}_roc_curve.png')
+
+    if wandb.run is not None:
+        wandb.log({"roc_curve": wandb.Image(plt)})
+
     plt.close()
 
     return roc_auc
-
 
 def generate_confusion_matrix(y_true, y_pred, model_name):
     """
@@ -54,8 +66,12 @@ def generate_confusion_matrix(y_true, y_pred, model_name):
     plt.ylabel('True Label')
     plt.tight_layout()
     plt.savefig(f'{model_name}_confusion_matrix.png')
-    plt.close()
 
+    # Log to WandB
+    if wandb.run is not None:
+        wandb.log({"confusion_matrix": wandb.Image(plt)})
+
+    plt.close()
 
 def calculate_metrics(y_true, y_pred, y_scores):
     """
@@ -76,18 +92,31 @@ def calculate_metrics(y_true, y_pred, y_scores):
     # metrics
     metrics = {
         'Accuracy': (tp + tn) / (tp + tn + fp + fn),
+        'Balanced Accuracy': balanced_accuracy_score(y_true, y_pred),
         'Sensitivity (Recall)': tp / (tp + fn),
         'Specificity': tn / (tn + fp),
         'Precision': tp / (tp + fp),
         'F1 Score': 2 * tp / (2 * tp + fp + fn),
+        'Macro F1': f1_score(y_true, y_pred, average='macro'),
         'ROC AUC': auc(roc_curve(y_true, y_scores)[0], roc_curve(y_true, y_scores)[1])
     }
+
+    # Log metrics to WandB
+    if wandb.run is not None:
+        wandb.log(metrics)
 
     return metrics
 
 
-def results():
-    predictions = get_data("predictions.csv")
+def results(model_name):
+    # Initialize WandB run
+    wandb.init(
+        project="ad-click-prediction",
+        name=f"{model_name}_evaluation",
+        config={"model_type": model_name}
+    )
+
+    predictions_df = get_data(f"{model_name}_predictions.csv")
 
     # Olga: Extract true labels and predictions
     y_true = predictions_df['true_label']
@@ -114,12 +143,19 @@ def results():
 
     #compute_roc_curve(predictions) # Jessica's line - I just commented this
 
+    # Close WandB run
+    wandb.finish()
 
 
 if __name__ == '__main__':
-   parser = argparse.ArgumentParser(description="Trainer")
-   parser.add_argument("-m", "--model_name", default=DECISION_TREE)
-   parser.add_argument("-e", "--csv_path", default=DECISION_TREE)
+    parser = argparse.ArgumentParser(description="Results Generator")
+    parser.add_argument(
+        "-m", "--model_name",
+        choices=[NAIVE_BAYES, XGBOOST, LIGHTGBM],
+        default=NAIVE_BAYES,
+        help="Specify the model for generating results"
+    )
+    parser.add_argument("-e", "--csv_path", default=NAIVE_BAYES)
 
-   args = parser.parse_args()
-   results(args.model_name, args.csv_path)
+    args = parser.parse_args()
+    results(args.model_name)
