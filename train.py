@@ -9,14 +9,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from constants import LOGISTIC_REGRESSION, ADABOOST
+from constants import LOGISTIC_REGRESSION, ADABOOST, RANDOM_FOREST
 from utils import get_data, ThresholdClassifier
 from imblearn.under_sampling import NearMiss
 
-
 def _get_data(path: str):
     return get_data(f"{path}/X_train.csv"), get_data(f"{path}/y_train.csv")
-
 
 def save_model(model_name, grid_search, features_name):
     os.makedirs("models", exist_ok=True)
@@ -40,7 +38,7 @@ def save_model(model_name, grid_search, features_name):
     feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
 
 def get_feature_importance(model_name, grid_search):
-    if model_name == 'AdaBoost':
+    if model_name == 'AdaBoost' or model_name == 'Random_Forest':
         return grid_search.best_estimator_.feature_importances_
     if model_name == 'logistic_regression':
         return grid_search.best_estimator_.coef_[0]
@@ -86,8 +84,6 @@ def train_logistic_regression(X_train, y_train):
     save_model("logistic_regression", grid_search, X_train.shape[1])
     print("LogisticRegression saved")
 
-
-
 def perform_grid_search(X_train, y_train, model, param_grid):
     # Define multiple scoring metrics suitable for imbalanced data
     scoring = {
@@ -115,6 +111,7 @@ def perform_grid_search(X_train, y_train, model, param_grid):
     grid_search.fit(X_train, y_train)
 
     return grid_search
+
 def train_adaboost(X_train, y_train):
     # Create base estimators with different depths
     dt_1 = DecisionTreeClassifier(max_depth=1, class_weight='balanced')
@@ -133,13 +130,34 @@ def train_adaboost(X_train, y_train):
     save_model("AdaBoost", grid_search, X_train.shape[1])
     print("AdaBoost saved")
 
+def train_random_forest(X_train, y_train):
+    # Initialize the classifier
+    rf = RandomForestClassifier(random_state=42)
+    
+    # Define the parameter grid
+    param_grid = {
+        'n_estimators': [50, 100],
+        'max_depth': [10, None],
+        "min_samples_split": [2],
+        "min_samples_leaf": [1, 2],
+        "class_weight": ["balanced"]
+    }
+    
+    # Perform Grid Search
+    grid_search = perform_grid_search(X_train, y_train, rf, param_grid)
+    
+    # Save the trained model
+    save_model("Random_Forest", grid_search, X_train.shape[1])
+    print("RandomForest saved")
+
 def unknown_model(*args):
     raise Exception("Model not supported")
 
 def main(path: str, model: str):
     models = {
         LOGISTIC_REGRESSION: train_logistic_regression,
-        ADABOOST: train_adaboost
+        ADABOOST: train_adaboost,
+        RANDOM_FOREST: train_random_forest
     }
 
     X_train, y_train = _get_data(path)

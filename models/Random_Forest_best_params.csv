@@ -1,0 +1,2 @@
+class_weight,max_depth,min_samples_leaf,min_samples_split,n_estimators
+balanced,10,1,2,100
