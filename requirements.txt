@@ -11,3 +11,4 @@ tzdata==2024.2
 invoke~=2.2.0
 wandb==0.19.4
 matplotlib==3.5.1
+imblearn
