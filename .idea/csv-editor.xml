@@ -3,6 +3,13 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="\AdaBoost_metrics.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\data\X_test.csv">
           <value>
             <Attribute>
@@ -31,14 +38,21 @@
             </Attribute>
           </value>
         </entry>
-        <entry key="\knn_metrics.csv">
+        <entry key="\models\AdaBoost_best_params.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
             </Attribute>
           </value>
         </entry>
-        <entry key="\logistic_metrics.csv">
+        <entry key="\models\AdaBoost_best_score.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\models\AdaBoost_feature_importance.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
@@ -88,13 +102,6 @@
           </value>
         </entry>
         <entry key="\train_dataset_full.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="\y_test.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

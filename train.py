@@ -1,16 +1,16 @@
 import argparse
 import os
 import pickle
-
 import pandas as pd
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.ensemble import AdaBoostClassifier
 from sklearn.metrics import make_scorer, average_precision_score, roc_auc_score, recall_score, f1_score
-from sklearn.model_selection import cross_val_score, GridSearchCV
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
-from constants import KNN, LOGISTIC_REGRESSION
-from utils import get_data
+from sklearn.tree import DecisionTreeClassifier
+from constants import LOGISTIC_REGRESSION, ADABOOST
+from utils import get_data, ThresholdClassifier
+from imblearn.under_sampling import NearMiss
 
 
 def _get_data(path: str):
@@ -32,57 +32,40 @@ def save_model(model_name, grid_search, features_name):
 
     feature_importance = pd.DataFrame({
         'feature': range(features_name),
-        'importance': abs(grid_search.best_estimator_.coef_[0])
+        'importance': abs(get_feature_importance(model_name, grid_search))
     })
     feature_importance =feature_importance.sort_values('importance', ascending=False)
     # Save feature importance
     feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
 
+def get_feature_importance(model_name, grid_search):
+    if model_name == 'AdaBoost':
+        return grid_search.best_estimator_.feature_importances_
+    if model_name == 'logistic_regression':
+        return grid_search.best_estimator_.coef_[0]
 
 def calculate_class_weights(y_train):
-    # Calculate class weights
-    total_samples = len(y_train)
+    # Calculate class weights based on class ratio
     class_0 = len(y_train[y_train['is_click'] == 0])
     class_1 = len(y_train[y_train['is_click'] == 1])
+
     class_weights = {
-        0: (total_samples / (2 * class_0)),
-        1: (total_samples / (2 * class_1))
+        0: 1,  # majority class weight stays at 1
+        1: class_0 / class_1  # minority class weight based on ratio
     }
+
     return class_weights
 
-
-class ThresholdClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, threshold=0.5, C=1.0, class_weight=None,
-                 penalty='l2', solver='liblinear', max_iter=1000):
-        self.threshold = threshold
-        self.C = C
-        self.class_weight = class_weight
-        self.penalty = penalty
-        self.solver = solver
-        self.max_iter = max_iter
-
-    def fit(self, X, y):
-        # Create LogisticRegression with the parameters
-        self.model = LogisticRegression(
-            C=self.C,
-            class_weight=self.class_weight,
-            penalty=self.penalty,
-            solver=self.solver,
-            max_iter=self.max_iter
-        )
-        self.model.fit(X, y)
-        # Add LogisticRegression attributes
-        self.coef_ = self.model.coef_
-        self.intercept_ = self.model.intercept_
-        self.classes_ = self.model.classes_
-        return self
-
-    def predict(self, X):
-        y_pred_proba = self.model.predict_proba(X)
-        return (y_pred_proba[:, 1] >= self.threshold).astype(int)
-
-    def predict_proba(self, X):
-        return self.model.predict_proba(X)
+def data_resample(X_train, y_train):
+    minority_class_count = len(y_train[y_train['is_click'] == 1])
+    # Initialize NearMiss
+    nm = NearMiss(
+        version=1,
+        n_neighbors=15,
+        sampling_strategy={0: minority_class_count*10}
+    )
+    X_resampled, y_resampled = nm.fit_resample(X_train, y_train)
+    return X_resampled, y_resampled
 
 def train_logistic_regression(X_train, y_train):
     # model = LogisticRegression()
@@ -122,7 +105,7 @@ def perform_grid_search(X_train, y_train, model, param_grid):
         param_grid,
         cv=cv,
         scoring=scoring,
-        refit='f1',  # Use balanced accuracy to select best model
+        refit='f1',
         n_jobs=-1,
         verbose=1,
         return_train_score=True
@@ -131,38 +114,35 @@ def perform_grid_search(X_train, y_train, model, param_grid):
     grid_search.fit(X_train, y_train)
 
     return grid_search
+def train_adaboost(X_train, y_train):
+    # Create base estimators with different depths
+    dt_1 = DecisionTreeClassifier(max_depth=1, class_weight='balanced')
+    dt_2 = DecisionTreeClassifier(max_depth=2, class_weight='balanced')
+    dt_3 = DecisionTreeClassifier(max_depth=3, class_weight='balanced')
+    AdaBoost= AdaBoostClassifier(random_state=42)
 
-
-def train_knn(X_train, y_train, k=None):
-    knn = KNeighborsClassifier()
-    # param_grid = {
-    #     'n_neighbors': [3, 5, 7, 9, 11, 13, 15],  # Different values of k
-    #     'weights': ['uniform', 'distance'],  # Weight function used in prediction
-    #     'metric': ['euclidean', 'manhattan', 'minkowski'],  # Distance metrics
-    #     'p': [1, 2],  # Power parameter for Minkowski metric
-    #     'leaf_size': [10, 20, 30, 40]  # Leaf size for tree data structure
-    # }
     param_grid = {
-        'n_neighbors': [3],  # Different values of k
-        'weights': ['uniform'],  # Weight function used in prediction
-        'metric': ['euclidean'],  # Distance metrics
-        'p': [1, 2],  # Power parameter for Minkowski metric
+        'estimator': [dt_1, dt_2, dt_3],
+        'n_estimators': [50, 100, 150, 200, 250, 300, 500, 700] ,
+        'learning_rate': [0.01, 0.05, 0.1, 0.3, 0.5, 1.0],
+        'algorithm': ['SAMME', 'SAMME.R']
     }
-    model = perform_grid_search(X_train, y_train, knn, param_grid)
-    save_model(model, "knn")
-    print("KNN saved")
+
+    grid_search = perform_grid_search(X_train, y_train, AdaBoost, param_grid)
+    save_model("AdaBoost", grid_search, X_train.shape[1])
+    print("AdaBoost saved")
 
 def unknown_model(*args):
     raise Exception("Model not supported")
 
 def main(path: str, model: str):
     models = {
-        KNN: train_knn,
-        LOGISTIC_REGRESSION: train_logistic_regression
+        LOGISTIC_REGRESSION: train_logistic_regression,
+        ADABOOST: train_adaboost
     }
 
     X_train, y_train = _get_data(path)
-
+    # X_train, y_train = data_resample(X_train, y_train)
     train_function = models.get(model, unknown_model)
     train_function(X_train, y_train)
 

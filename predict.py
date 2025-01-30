@@ -1,9 +1,7 @@
 import argparse
 import os
 import pickle
-
-from utils import get_data, save_numpy_array, save_dataframe
-
+from utils import get_data, save_numpy_array, ThresholdClassifier
 
 def load_model(model_path):
     with open(model_path, 'rb') as f:

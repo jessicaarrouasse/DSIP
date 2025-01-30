@@ -12,3 +12,4 @@ invoke~=2.2.0
 wandb==0.19.4
 seaborn~=0.13.2
 matplotlib~=3.10.0
+imbalanced-learn~=0.13.0
