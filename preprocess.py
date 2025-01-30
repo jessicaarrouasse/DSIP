@@ -142,14 +142,12 @@ def iterative_imputation(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean_data(df):
    clean_df = df.drop_duplicates()
-   clean_df = df.dropna(subset=['is_click'])
+   clean_df = clean_df.dropna(subset=['is_click'])
    # Ensure datetime is parsed
    clean_df = clean_df.copy()
    clean_df['DateTime'] = pd.to_datetime(clean_df['DateTime'])
-   # TODO Removing outliers (IQR Method???)
    # demographics imputation
    imputed_clean_df = iterative_imputation(clean_df)
-   # TODO Normalizing (StandardScaler ??)
    return imputed_clean_df
 
 def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:

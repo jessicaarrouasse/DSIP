@@ -61,7 +61,7 @@ def data_resample(X_train, y_train):
     nm = NearMiss(
         version=1,
         n_neighbors=15,
-        sampling_strategy={0: minority_class_count*10}
+        sampling_strategy={0: minority_class_count*7}
     )
     X_resampled, y_resampled = nm.fit_resample(X_train, y_train)
     return X_resampled, y_resampled
