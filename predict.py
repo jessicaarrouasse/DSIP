@@ -19,8 +19,8 @@ def main(model_path, test_data_path):
     predictions = model.predict(predict_df)
     predictions_proba = model.predict_proba(predict_df)
     model_name = model_path.split("/")[-1].split(".")[0]
-    save_predictions(f"{model_name}", predictions)
-    save_predictions(f"{model_name}_proba", predictions_proba)
+    save_predictions(f"{model_name}_test_1st", predictions)
+    save_predictions(f"{model_name}_proba_test_1st", predictions_proba)
     print("Done")
 
 
