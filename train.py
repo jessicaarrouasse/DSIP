@@ -8,16 +8,18 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.tree import DecisionTreeClassifier
-from constants import LOGISTIC_REGRESSION, ADABOOST
+from constants import LOGISTIC_REGRESSION, ADABOOST, SVM
 from utils import get_data, ThresholdClassifier
 from imblearn.under_sampling import NearMiss
+from sklearn.svm import SVC
+from sklearn.inspection import permutation_importance
 
 
 def _get_data(path: str):
     return get_data(f"{path}/X_train.csv"), get_data(f"{path}/y_train.csv")
 
 
-def save_model(model_name, grid_search, features_name):
+def save_model(model_name, grid_search, X, y):
     os.makedirs("models", exist_ok=True)
     with open(f'models/{model_name}.pkl', 'wb') as f:
         pickle.dump(grid_search.best_estimator_, f)
@@ -30,19 +32,46 @@ def save_model(model_name, grid_search, features_name):
     score_df = pd.DataFrame([{'best_score': grid_search.best_score_}])
     score_df.to_csv(f'models/{model_name}_best_score.csv', index=False)
 
-    feature_importance = pd.DataFrame({
-        'feature': range(features_name),
-        'importance': abs(get_feature_importance(model_name, grid_search))
-    })
-    feature_importance =feature_importance.sort_values('importance', ascending=False)
-    # Save feature importance
-    feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
+    # feature_importance = pd.DataFrame({
+    #     'feature': range(features_name),
+    #     'importance': abs(get_feature_importance(model_name, grid_search))
+    # })
+    # feature_importance =feature_importance.sort_values('importance', ascending=False)
+    # # Save feature importance
+    # feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
 
-def get_feature_importance(model_name, grid_search):
+    fi = get_feature_importance(model_name, grid_search, X, y)
+    if fi is not None:
+        feature_importance = pd.DataFrame({
+            'feature': range(X.shape[1]),
+            'importance': abs(fi)
+        }).sort_values('importance', ascending=False)
+
+        feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
+    else:
+        print(f"No feature importance computed for {model_name} (possibly non-linear SVM without Permutation).")
+
+
+def get_feature_importance(model_name, grid_search, X=None, y=None):
     if model_name == 'AdaBoost':
         return grid_search.best_estimator_.feature_importances_
     if model_name == 'logistic_regression':
         return grid_search.best_estimator_.coef_[0]
+    elif model_name == 'svm':
+        if hasattr(grid_search.best_estimator_, 'coef_'):
+            return grid_search.best_estimator_.coef_[0]
+        else:
+            if X is None or y is None:
+                print("X or y not provided, cannot compute permutation importance.")
+                return None
+            
+            result = permutation_importance(
+                grid_search.best_estimator_, X, y,
+                scoring='f1',
+                n_repeats=5,
+                random_state=42
+            )
+            return result.importances_mean
 
 def calculate_class_weights(y_train):
     # Calculate class weights based on class ratio
@@ -82,7 +111,7 @@ def train_logistic_regression(X_train, y_train):
     }
 
     grid_search = perform_grid_search(X_train, y_train, model, param_grid)
-    save_model("logistic_regression", grid_search, X_train.shape[1])
+    save_model("logistic_regression", grid_search, X_train, y_train)
     print("LogisticRegression saved")
 
 
@@ -129,16 +158,32 @@ def train_adaboost(X_train, y_train):
     }
 
     grid_search = perform_grid_search(X_train, y_train, AdaBoost, param_grid)
-    save_model("AdaBoost", grid_search, X_train.shape[1])
+    save_model("AdaBoost", grid_search, X_train, y_train)
     print("AdaBoost saved")
 
 def unknown_model(*args):
     raise Exception("Model not supported")
 
+def train_svm(X_train, y_train):
+    svc = SVC(probability=True, random_state=42)
+    class_weights = calculate_class_weights(y_train)
+
+    param_grid = {
+        'C': [0.1, 1, 10],
+        'kernel': ['linear', 'rbf'],
+        'gamma': ['scale', 'auto'],
+        'class_weight': [None, class_weights, 'balanced']
+    }
+
+    grid_search = perform_grid_search(X_train, y_train, svc, param_grid)
+    save_model("svm", grid_search, X_train, y_train)
+    print("SVM saved")
+
 def main(path: str, model: str):
     models = {
         LOGISTIC_REGRESSION: train_logistic_regression,
-        ADABOOST: train_adaboost
+        ADABOOST: train_adaboost,
+        SVM: train_svm 
     }
 
     X_train, y_train = _get_data(path)
