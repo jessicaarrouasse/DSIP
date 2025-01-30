@@ -11,7 +11,6 @@ import xgboost as xgb
 import lightgbm as lgb
 
 
-# Move SklearnWrapper class to the top level
 class SklearnWrapper:
     def __init__(self, model):
         self.model = model
@@ -173,11 +172,11 @@ def train_xgboost(X_train, y_train, X_val, y_val):
     # Define parameter grid
     param_grid = {
         'max_depth': [3],
-        'learning_rate': [0.2],
-        'n_estimators': [50],
+        'learning_rate': [0.3],
+        'n_estimators': [200],
         'min_child_weight': [20],
-        'subsample': [0.5],
-        'colsample_bytree': [0.8],
+        'subsample': [0.9],
+        'colsample_bytree': [0.9],
         'scale_pos_weight': [scale_pos_weight]
     }
 

@@ -9,19 +9,45 @@ import xgboost as xgb
 import lightgbm as lgb
 from sklearn.metrics import f1_score
 
-# Add this class at the top of the file, after imports
+
 class SklearnWrapper:
     def __init__(self, model):
         self.model = model
 
     def predict(self, X):
-        dtest = xgb.DMatrix(X)
-        preds = self.model.predict(dtest)
+        # If X is already a DMatrix, use it directly
+        if isinstance(X, xgb.DMatrix):
+            preds = self.model.predict(X)
+        else:
+            # If it's a DataFrame, use its feature names
+            if isinstance(X, pd.DataFrame):
+                dtest = xgb.DMatrix(X, feature_names=X.columns.tolist())
+            # If it's a numpy array, generate feature names
+            elif isinstance(X, np.ndarray):
+                feature_names = [f'feature_{i}' for i in range(X.shape[1])]
+                dtest = xgb.DMatrix(X, feature_names=feature_names)
+            else:
+                raise TypeError(f"Unsupported input type: {type(X)}")
+            preds = self.model.predict(dtest)
+
         return (preds > 0.5).astype(int)
 
     def predict_proba(self, X):
-        dtest = xgb.DMatrix(X)
-        preds = self.model.predict(dtest)
+        # If X is already a DMatrix, use it directly
+        if isinstance(X, xgb.DMatrix):
+            preds = self.model.predict(X)
+        else:
+            # If it's a DataFrame, use its feature names
+            if isinstance(X, pd.DataFrame):
+                dtest = xgb.DMatrix(X, feature_names=X.columns.tolist())
+            # If it's a numpy array, generate feature names
+            elif isinstance(X, np.ndarray):
+                feature_names = [f'feature_{i}' for i in range(X.shape[1])]
+                dtest = xgb.DMatrix(X, feature_names=feature_names)
+            else:
+                raise TypeError(f"Unsupported input type: {type(X)}")
+            preds = self.model.predict(dtest)
+
         return np.column_stack((1 - preds, preds))
 
     def score(self, X, y):
@@ -35,13 +61,22 @@ def get_data(gender):
     with open(file_path, 'rb') as f:
         X_test, y_test = pickle.load(f)
 
+    # Convert numpy array to DataFrame with feature names if necessary
+    if isinstance(X_test, np.ndarray):
+        feature_names = [f'feature_{i}' for i in range(X_test.shape[1])]
+        X_test = pd.DataFrame(X_test, columns=feature_names)
+
     return X_test, y_test
 
 def load_model(model_name, gender):
     """Load gender-specific model from disk."""
     with open(f'models/{model_name}_{gender}.pkl', 'rb') as f:
         model = pickle.load(f)
+
+    if model_name == XGBOOST:
+        model = SklearnWrapper(model)
     return model
+
 
 def predict_for_gender(model_name, gender):
     """Make predictions for a specific gender."""
