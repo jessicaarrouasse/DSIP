@@ -8,6 +8,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from constants import LOGISTIC_REGRESSION, ADABOOST
 from utils import get_data, ThresholdClassifier
 from imblearn.under_sampling import NearMiss
