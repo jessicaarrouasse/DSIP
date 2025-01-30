@@ -8,6 +8,8 @@ import logging
 import pickle
 from sklearn.preprocessing import StandardScaler
 
+from utils import save_dataframe
+
 # Set up logging configuration
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -150,7 +152,7 @@ def clean_data(df):
    # TODO Normalizing (StandardScaler ??)
    return imputed_clean_df
 
-def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
    '''
    The function splits the input cleaned df into training, test and validation sets 
    while ensuring representativeness and preventing data leakage. Each user_id/session_id 
@@ -158,7 +160,7 @@ def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFra
    Args:
       df (pd.DataFrame): The cleaned DataFrame to be split.
    Returns:
-      Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: DataFrames for each set.
+      Tuple[pd.DataFrame, pd.DataFrame]: DataFrames for each set.
    '''
    df = df.copy()
    # Separate rows with null user_id
@@ -171,32 +173,23 @@ def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFra
     'is_click': user_groups['is_click'].max(),  # Use max to indicate if the user clicked at least once
    })
    # Split into train and temp (validation + test) based on user_id
-   train_users, temp_users = train_test_split(
+   train_users, test_users = train_test_split(
       user_df['user_id'],  # Use user_id for splitting
-      test_size=0.4,  # 40% for validation + test
+      test_size=0.2,  # 40% for validation + test
       stratify=user_df['is_click'],  # Stratify by is_click
       random_state=42
    )
-   # Split the remaining data (temp_users) into validation and test sets
-   val_users, test_users = train_test_split(
-      temp_users,
-      test_size=0.5,  # 50% of 40% -> 20% for validation, 20% for test
-      stratify=user_df.loc[temp_users, 'is_click'],  # Stratify by is_click for balance
-      random_state=42
-   )
+
    # Create the final train, validation, and test sets
    train_data = non_null_user_data[non_null_user_data['user_id'].isin(train_users)]
-   val_data = non_null_user_data[non_null_user_data['user_id'].isin(val_users)]
    test_data = non_null_user_data[non_null_user_data['user_id'].isin(test_users)]
    # Randomly split null_user_data proportionally
-   null_train, null_temp = train_test_split(null_user_data, test_size=0.4, random_state=42)
-   null_validation, null_test = train_test_split(null_temp, test_size=0.5, random_state=42)
+   null_train, null_test = train_test_split(null_user_data, test_size=0.2, random_state=42)
    # Combine splits
    train_data = pd.concat([train_data, null_train], ignore_index=True)
-   val_data = pd.concat([val_data, null_validation], ignore_index=True)
    test_data = pd.concat([test_data, null_test], ignore_index=True)
    
-   return train_data, test_data, val_data
+   return train_data, test_data
 
 def compute_train_stats(train_data: pd.DataFrame) -> dict:
    logging.info("Starting to compute statistics for training data.")
@@ -288,25 +281,29 @@ def feature_extraction(df: pd.DataFrame, selected_features: List[str], train_sta
    df['product_category_1_age_level'] = df['product_category_1'] * df['age_level'] 
    
    logging.info("Feature extraction completed.")
+
+   df = df.dropna(subset = selected_features)
+
    # Extract selected features and labels
-   X = df[selected_features].to_numpy()
-   y = df['is_click'].to_numpy()
-   
+   X = df[selected_features]#.to_numpy()
+   y = df['is_click']#.to_numpy()
+
+   # columns = df.select_dtypes(include=[np.number]).columns
    # Feature scaling
    if scaler is None:
       scaler = StandardScaler()  # Create a new scaler if not provided
-      X = scaler.fit_transform(X)  # Fit and transform for training data
+      X[selected_features] = scaler.fit_transform(X)
    else:
-      X = scaler.transform(X)  # Transform for test/validation data
+      X[selected_features] = scaler.transform(X)  # Transform for test/validation data
    
    return X, y, scaler
 
-def save_dataframe(df, filename):
+def save_numpy_array(df, filename):
    # Create the 'data' folder if it doesn't exist
    output_folder = "data"
    os.makedirs(output_folder, exist_ok=True)
    file_path = os.path.join(output_folder, filename)
-   df.to_csv(file_path, index=False)
+   np.savetxt(file_path, df, delimiter=",")
 
 def save_pickle(data, filename):
     # Create the 'data' folder if it doesn't exist
@@ -323,12 +320,7 @@ def main(csv_path):
    df = parse(csv_path)
    df = clean_data(df)
    # 2. Split Data
-   train_data, test_data, validation_data = split_data(df)
-   # Save the datasets
-   save_dataframe(train_data, "train.csv")
-   save_dataframe(test_data, "test.csv")
-   save_dataframe(validation_data, "validation.csv")
-   print("Train, test and validation datasets saved")
+   train_data, test_data = split_data(df)
    # 3. Feature Extraction
    # 3.1 Compute Statistics on the Training Set
    train_stats = compute_train_stats(train_data)
@@ -336,14 +328,14 @@ def main(csv_path):
    selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity', 'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count', 'product_category_1_age_level']
    # 3.3 Feature Extraction for Training
    X_train, y_train, scaler = feature_extraction(train_data, selected_features)
-   # 3.4 Feature Extraction for Test/Validation (using precomputed statistics)
-   X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats)
-   X_validation, y_validation, _ = feature_extraction(validation_data, selected_features, train_stats, scaler=scaler)
-   # Save the features and labels as pickle files
-   save_pickle((X_train, y_train), "X_train_y_train.pkl")
-   save_pickle((X_test, y_test), "X_test_y_test.pkl")
-   save_pickle((X_validation, y_validation), "X_validation_y_validation.pkl")
-   
+   # 3.4 Feature Extraction for Test (using precomputed statistics)
+   X_test, y_test, _ = feature_extraction(test_data, selected_features, train_stats, scaler=scaler)
+   # Save the features and labels s csv files
+   save_dataframe(X_train, "data/X_train.csv")
+   save_dataframe(y_train, "data/y_train.csv")
+   save_dataframe(X_test, "data/X_test.csv")
+   save_dataframe(y_test, "data/y_test.csv")
+
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser()

@@ -1,1 +1,2 @@
-DECISION_TREE = "decision_tree"
+LOGISTIC_REGRESSION = "logistic_regression"
+ADABOOST = "AdaBoost"
