@@ -1,10 +1,13 @@
 import argparse
 import pandas as pd
-import numpy as np
+from matplotlib import pyplot as plt
 from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report
+import seaborn as sns
+
+from utils import get_data
 
 
-def compute_roc_curve(y_true, y_scores, model_name):
+def compute_roc_curve(y_true, y_scores, model_name: str):
     #pass
     """
         Olga: compute and plot ROC curve - still not sure that we need this
@@ -86,14 +89,16 @@ def calculate_metrics(y_true, y_pred, y_scores):
     return metrics
 
 
-def results():
-    predictions = get_data("predictions.csv")
+def results(predictions_path: str, predictions_proba_path:str,  ground_truth_path: str):
+    predictions = get_data(predictions_path, header=False)
+    predictions_proba = get_data(predictions_proba_path, header=False)
+    ground_truth = get_data(ground_truth_path)
 
     # Olga: Extract true labels and predictions
-    y_true = predictions_df['true_label']
-    y_pred = predictions_df['predicted_label']
-    y_scores = predictions_df['predicted_probability']
-
+    y_true = ground_truth
+    y_pred = predictions
+    y_scores = predictions_proba[1]
+    model_name = predictions_path.split("/")[-1].split("_")[0]
     # Compute ROC curve
     roc_auc = compute_roc_curve(y_true, y_scores, model_name) #Olga: call compute_roc_curve method
 
@@ -118,8 +123,9 @@ def results():
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser(description="Trainer")
-   parser.add_argument("-m", "--model_name", default=DECISION_TREE)
-   parser.add_argument("-e", "--csv_path", default=DECISION_TREE)
+   parser.add_argument("-pp", "--predictions-path")
+   parser.add_argument("-ppp", "--predictions-proba-path")
+   parser.add_argument("-gt", "--ground-truth-path")
 
    args = parser.parse_args()
-   results(args.model_name, args.csv_path)
+   results(args.predictions_path, args.predictions_proba_path, args.ground_truth_path)
