@@ -1,2 +1,0 @@
-algorithm,estimator,learning_rate,n_estimators
-SAMME,"DecisionTreeClassifier(class_weight='balanced', max_depth=2)",0.01,50

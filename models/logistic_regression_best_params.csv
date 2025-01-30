@@ -1,2 +1,0 @@
-C,class_weight,max_iter,penalty,solver,threshold
-0.001,"{0: 1, 1: 1.0}",1000,l1,liblinear,0.1
