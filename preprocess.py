@@ -325,7 +325,10 @@ def main(csv_path):
    # 3.1 Compute Statistics on the Training Set
    train_stats = compute_train_stats(train_data)
    # 3.2 Select features - TODO: consider to move to consts
-   selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity', 'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count', 'product_category_1_age_level']
+   selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity', 
+                        'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count', 
+                        'product_category_1_age_level', 'user_id', 'hour', 'time_period',
+                        'gender_binary', 'campaign_ctr',  'webpage_ctr', 'engagement_city']
    # 3.3 Feature Extraction for Training
    X_train, y_train, scaler = feature_extraction(train_data, selected_features)
    # 3.4 Feature Extraction for Test (using precomputed statistics)
