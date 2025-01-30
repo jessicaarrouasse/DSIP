@@ -38,9 +38,9 @@ def save_model(model_name, grid_search, features_name):
     feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
 
 def get_feature_importance(model_name, grid_search):
-    if model_name == 'AdaBoost' or model_name == 'Random_Forest':
+    if model_name == ADABOOST or model_name == RANDOM_FOREST:
         return grid_search.best_estimator_.feature_importances_
-    if model_name == 'logistic_regression':
+    if model_name == LOGISTIC_REGRESSION:
         return grid_search.best_estimator_.coef_[0]
 
 def calculate_class_weights(y_train):
@@ -81,7 +81,7 @@ def train_logistic_regression(X_train, y_train):
     }
 
     grid_search = perform_grid_search(X_train, y_train, model, param_grid)
-    save_model("logistic_regression", grid_search, X_train.shape[1])
+    save_model(LOGISTIC_REGRESSION, grid_search, X_train.shape[1])
     print("LogisticRegression saved")
 
 def perform_grid_search(X_train, y_train, model, param_grid):
@@ -127,7 +127,7 @@ def train_adaboost(X_train, y_train):
     }
 
     grid_search = perform_grid_search(X_train, y_train, AdaBoost, param_grid)
-    save_model("AdaBoost", grid_search, X_train.shape[1])
+    save_model(ADABOOST, grid_search, X_train.shape[1])
     print("AdaBoost saved")
 
 def train_random_forest(X_train, y_train):
@@ -147,7 +147,7 @@ def train_random_forest(X_train, y_train):
     grid_search = perform_grid_search(X_train, y_train, rf, param_grid)
     
     # Save the trained model
-    save_model("Random_Forest", grid_search, X_train.shape[1])
+    save_model(RANDOM_FOREST, grid_search, X_train.shape[1])
     print("RandomForest saved")
 
 def unknown_model(*args):
