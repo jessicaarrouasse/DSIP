@@ -80,6 +80,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\predictions\AdaBoost_predictions.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\predictions\knn_predictions.csv">
           <value>
             <Attribute>
