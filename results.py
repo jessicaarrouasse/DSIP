@@ -1,4 +1,6 @@
 import argparse
+import os
+
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report
@@ -32,7 +34,7 @@ def compute_roc_curve(y_true, y_scores, model_name: str):
     plt.ylabel('True Positive Rate')
     plt.title(f'ROC Curve - {model_name}')
     plt.legend(loc="lower right")
-    plt.savefig(f'{model_name}_roc_curve.png')
+    plt.savefig(f'metrics/{model_name}_roc_curve.png')
     plt.close()
 
     return roc_auc
@@ -56,7 +58,7 @@ def generate_confusion_matrix(y_true, y_pred, model_name):
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     plt.tight_layout()
-    plt.savefig(f'{model_name}_confusion_matrix.png')
+    plt.savefig(f'metrics/{model_name}_confusion_matrix.png')
     plt.close()
 
 
@@ -99,6 +101,8 @@ def results(predictions_path: str, predictions_proba_path:str,  ground_truth_pat
     y_pred = predictions
     y_scores = predictions_proba[1]
     model_name = predictions_path.split("/")[-1].split("_")[0]
+
+    os.makedirs("metrics", exist_ok=True)
     # Compute ROC curve
     roc_auc = compute_roc_curve(y_true, y_scores, model_name) #Olga: call compute_roc_curve method
 
@@ -109,17 +113,13 @@ def results(predictions_path: str, predictions_proba_path:str,  ground_truth_pat
     metrics = calculate_metrics(y_true, y_pred, y_scores) # Olga: call calculate_metrics method
 
     # Save metrics to CSV
-    metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Value'])
-    metrics_df.to_csv(f'{model_name}_metrics.csv')
+    metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Valupe'])
+    metrics_df.to_csv(f'metrics/{model_name}_metrics.csv')
 
     # Print metrics
     print(f"Metrics for {model_name}:")
     for metric, value in metrics.items():
         print(f"{metric}: {value:.4f}")
-
-    #compute_roc_curve(predictions) # Jessica's line - I just commented this
-
-
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser(description="Trainer")
