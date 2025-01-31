@@ -186,7 +186,8 @@ def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
    # Combine splits
    train_data = pd.concat([train_data, null_train], ignore_index=True)
    test_data = pd.concat([test_data, null_test], ignore_index=True)
-   
+   train_data.to_csv("data/train_data_cleaned.csv", index=False)
+   test_data.to_csv("data/test_data_cleaned.csv", index=False)
    return train_data, test_data
 
 def compute_train_stats(train_data: pd.DataFrame) -> dict:
