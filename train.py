@@ -286,8 +286,8 @@ def train(data_path: str, model_name: str, config: dict):
     # plt.savefig(f"confusion_matrix_{model_name}.png")
     # wandb.log({"confusion_matrix": wandb.Image(f"confusion_matrix_{model_name}.png")})
     
-    # # Save the trained model
-    # save_model(model, model_name)
+    # Save the trained model
+    save_model(model, model_name)
     
     # Finish the wandb run
     wandb.finish()
