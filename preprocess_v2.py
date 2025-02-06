@@ -336,10 +336,10 @@ def save_pickle(data, filename):
     print(f"Saved {filename}")
 
 
-def main(csv_path, mode):
+def preprocess(csv_path, mode):
     # 1. Clean Data
-    df = parse(csv_path)
     if mode == "train":
+        df = parse(csv_path)
         df = clean_data_train_mode(df)
         # 2. Split Data
         train_data, test_data = split_data(df)
@@ -367,6 +367,7 @@ def main(csv_path, mode):
         save_dataframe(y_test, "data/y_test.csv")
 
     else:
+        df = csv_path
         df = clean_data_predict_mode(df)
         train_data = pd.read_csv("train_dataset_full.csv")
         test_data = df.copy()
@@ -387,6 +388,7 @@ def main(csv_path, mode):
 
         # Save the features and labels s csv files
         save_dataframe(X_test, "data/X_test_1st_process.csv")
+        return X_test
 
 
 if __name__ == '__main__':
@@ -394,4 +396,4 @@ if __name__ == '__main__':
     parser.add_argument("--csv-path", type=str)
     parser.add_argument("--mode", type=str)
     args = parser.parse_args()
-    main(args.csv_path, args.mode)
+    preprocess(args.csv_path, args.mode)
