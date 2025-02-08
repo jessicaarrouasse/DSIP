@@ -336,16 +336,31 @@ def save_pickle(data, filename):
     print(f"Saved {filename}")
 
 
+def load_pickle(filename):
+    # Define the folder where the pickles are stored
+    input_folder = "data"
+    file_path = os.path.join(input_folder, filename)
+    # Load the data from the pickle file
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File {filename} does not exist in the {input_folder} folder.")
+    with open(file_path, 'rb') as f:
+        data = pickle.load(f)
+    print(f"Loaded {filename}")
+    return data
+
+
 def main(csv_path, mode):
-    # 1. Clean Data
     df = parse(csv_path)
     if mode == "train":
+        # 1. Clean Data
         df = clean_data_train_mode(df)
         # 2. Split Data
         train_data, test_data = split_data(df)
         # 3. Feature Extraction
         # 3.1 Compute Statistics on the Training Set
         train_stats = compute_train_stats(train_data)
+        # save the train_stats as a pickle file
+        save_pickle(train_stats, "train_stats.pkl")
         # 3.2 Select features - TODO: consider to move to consts
         selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity',
                              'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count',
@@ -353,11 +368,13 @@ def main(csv_path, mode):
                              'gender_binary', 'campaign_ctr', 'webpage_ctr', 'engagement_city']
         # 3.3 Feature Extraction for Training
         train_data = feature_extraction(train_data)
-        train_data = train_data.dropna(subset=selected_features)
+        train_data = train_data.dropna(subset=selected_features) # to experiment with? - random forest handles nulls
         X_train, y_train, scaler = compute_scaling(selected_features, train_data, mode, None)
+        # save scaler as a pickle file
+        save_pickle(scaler, "scaler.pkl")
         # 3.4 Feature Extraction for Test (using precomputed statistics)
         test_data = feature_extraction(test_data, train_stats)
-        test_data = test_data.dropna(subset=selected_features)
+        test_data = test_data.dropna(subset=selected_features) # to experiment with? - random forest handles nulls
         X_test, y_test, _ = compute_scaling(selected_features, test_data, mode, scaler)
 
         # Save the features and labels s csv files
@@ -367,25 +384,23 @@ def main(csv_path, mode):
         save_dataframe(y_test, "data/y_test.csv")
 
     else:
+        # 1. Clean Data
         df = clean_data_predict_mode(df)
-        train_data = pd.read_csv("train_dataset_full.csv")
         test_data = df.copy()
-        # Feature Extraction
-        # Compute Statistics on the Training Set
-        train_stats = compute_train_stats(train_data)
-        # 3.2 Select features -
+        # 2. Feature Extraction
+        # 2.1 Load Statistics on the Training Set + Scaler
+        train_stats = load_pickle("train_stats.pkl")
+        scaler = load_pickle("scaler.pkl")
+        # 2.2 Select features
         selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity',
                              'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count',
                              'product_category_1_age_level', 'user_id', 'hour', 'time_period',
                              'gender_binary', 'campaign_ctr', 'webpage_ctr', 'engagement_city']
-        train_data = feature_extraction(train_data)
-        train_data = train_data.dropna(subset=selected_features)
-        X_train, y_train, scaler = compute_scaling(selected_features, train_data, mode, None)
-        # 3.4 Feature Extraction for Test (using precomputed statistics)
+        # 2.3 Feature Extraction for Test (using precomputed statistics)
         test_data = feature_extraction(test_data, train_stats)
         X_test, _, _ = compute_scaling(selected_features, test_data, mode, scaler)
 
-        # Save the features and labels s csv files
+        # Save the features and labels as csv files
         save_dataframe(X_test, "data/X_test_1st_process.csv")
 
 
