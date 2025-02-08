@@ -3,10 +3,37 @@ import os
 
 import pandas as pd
 from matplotlib import pyplot as plt
-from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report
+from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report, precision_recall_curve, average_precision_score
 import seaborn as sns
 
 from utils import get_data
+
+
+def compute_precision_recall_curve(y_true, y_scores, model_name: str):
+    """
+    compute and plot Precision-Recall curve
+
+    our parameters:
+        y_true (array): true labels
+        y_scores (array): predicted probabilities
+        model_name (str): name of the model
+    """
+    # Precision-Recall Curve
+    precision, recall, _ = precision_recall_curve(y_true, y_scores)
+    avg_precision = average_precision_score(y_true, y_scores)
+
+    # Plot Precision-Recall Curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall, precision, color='blue', lw=2,
+             label=f'Precision-Recall Curve (AP = {avg_precision:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve - {model_name}')
+    plt.legend(loc="lower left")
+    plt.savefig(f'metrics/{model_name}_precision_recall_curve.png')
+    plt.close()
+
+    return avg_precision
 
 
 def compute_roc_curve(y_true, y_scores, model_name: str):
@@ -106,11 +133,17 @@ def results(predictions_path: str, predictions_proba_path:str,  ground_truth_pat
     # Compute ROC curve
     roc_auc = compute_roc_curve(y_true, y_scores, model_name) #Olga: call compute_roc_curve method
 
+    # Generate Precision-Recall Curve and Average Precision
+    avg_precision = compute_precision_recall_curve(y_true, y_scores, model_name)
+
     # Generate confusion matrix
     generate_confusion_matrix(y_true, y_pred, model_name) # Olga: call generate_confusion_matrix method
 
     # Calculate metrics
     metrics = calculate_metrics(y_true, y_pred, y_scores) # Olga: call calculate_metrics method
+
+    # Add Average Precision to metrics
+    metrics['Average Precision (AP)'] = avg_precision
 
     # Save metrics to CSV
     metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Valupe'])
