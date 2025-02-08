@@ -1,9 +1,18 @@
+import pickle
 from io import StringIO
 
 import streamlit as st
 import pandas as pd
 from predict import predict
-from preprocess_v2 import preprocess
+from preprocess import preprocess_predict
+
+MODEL_PATH = "./models/Random_Forest.pkl"
+
+@st.cache_resource
+def load_pickle_cached(model_path):
+    with open(model_path, 'rb') as f:
+        file = pickle.load(f)
+    return file
 
 
 def main():
@@ -25,10 +34,13 @@ def main():
             if st.button("Generate Predictions"):
                 with st.spinner("Processing data and generating predictions..."):
                     # Preprocess the data
-                    processed_data = preprocess(input_df, "predict")
+                    train_stats = load_pickle_cached("./data/train_stats.pkl")
+                    scaler = load_pickle_cached("./data/scaler.pkl")
+                    processed_data = preprocess_predict(input_df, train_stats, scaler)
+
                     # Generate predictions
-                    model_path = "C:/Users/user/Documents/ydata/DSIP/models/Random_Forest.pkl"
-                    _, predictions_proba = predict(model_path, processed_data)
+                    model = load_pickle_cached(MODEL_PATH)
+                    _, predictions_proba = predict(model, processed_data)
 
                     # Ensure predictions are between 0 and 1
                     predictions = predictions_proba[:, 1]
