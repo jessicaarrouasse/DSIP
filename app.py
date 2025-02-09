@@ -16,6 +16,7 @@ def load_pickle_cached(model_path):
 
 
 def main():
+    st.title("Team: Data Queens")
     st.title("Click Probability Predictor")
     st.write("Upload your test data CSV file to get click probability predictions")
 
