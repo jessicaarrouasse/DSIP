@@ -7,6 +7,7 @@ from predict import predict
 from preprocess import preprocess_predict
 
 MODEL_PATH = "./models/Random_Forest.pkl"
+image_url = "https://directiveconsulting.com/wp-content/uploads/2019/06/unnamed-1.jpg"
 
 @st.cache_resource
 def load_pickle_cached(model_path):
@@ -17,6 +18,8 @@ def load_pickle_cached(model_path):
 
 def main():
     st.title("Team: Data Queens")
+     # Display the image 
+    st.image(image_url, width=300)
     st.title("Click Probability Predictor")
     st.write("Upload your test data CSV file to get click probability predictions")
 
