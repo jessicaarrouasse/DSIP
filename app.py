@@ -42,7 +42,7 @@ def main():
             st.dataframe(input_df.head())
 
             if st.button("Generate Predictions"):
-                with st.spinner("Processing data and generating predictions..."):
+                with st.spinner("We are calling our model to work its magic 🚀🤖"):
                     # Preprocess the data
                     train_stats = load_pickle_cached("./data/train_stats.pkl")
                     scaler = load_pickle_cached("./data/scaler.pkl")
