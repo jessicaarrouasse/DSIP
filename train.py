@@ -5,12 +5,12 @@ import pandas as pd
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.metrics import make_scorer, average_precision_score, roc_auc_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from constants import LOGISTIC_REGRESSION, ADABOOST, RANDOM_FOREST
-from utils import get_data, ThresholdClassifier
+from threshold_classifier import ThresholdClassifier
+from utils import get_data
 from imblearn.under_sampling import NearMiss
 
 def _get_data(path: str):

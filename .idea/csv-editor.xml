@@ -87,6 +87,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\predictions\Random_Forest_proba_predictions.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\predictions\knn_predictions.csv">
           <value>
             <Attribute>
