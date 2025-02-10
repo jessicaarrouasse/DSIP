@@ -35,16 +35,6 @@ def main():
             st.subheader("Input Data Preview")
             st.dataframe(input_df.head())
 
-            # Threshold Slider
-            st.subheader("Hi! you can decide on your own model threshold")
-            threshold = st.slider(
-                "Choose a threshold for classification (e.g., 0.5 for default)",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.5,
-                step=0.01,
-            )
-
             if st.button("Generate Predictions"):
                 with st.spinner("We are calling our model to work its magic 🚀🤖"):
                     # Preprocess the data
@@ -66,26 +56,37 @@ def main():
                     st.write(f"Output DataFrame shape: {output.shape}")
                     st.session_state.output = output
 
-                    # Alternative way to create CSV
                     csv_buffer = StringIO()
                     output.to_csv(csv_buffer, index=False, header=False)
-                    csv_string = csv_buffer.getvalue()
+                    st.session_state.csv_string = csv_buffer.getvalue()
 
-                    # Create download button
-                    st.download_button(
-                        label="Download Predictions Probabilities",
-                        data=csv_string,
-                        file_name="predictions.csv",
-                        mime="text/csv",
-                    )
 
-                    # Display sample predictions
-                    st.subheader("Sample Predictions")
-                    st.dataframe(output.head())
-                    
             if 'predictions' in st.session_state:
+                # Display sample predictions
+                st.subheader("Sample Predictions")
+                st.dataframe(st.session_state.output.head())
+
+                # Create download button
+                st.download_button(
+                    label="Download Predictions Probabilities",
+                    data=st.session_state.csv_string,
+                    file_name="predictions.csv",
+                    mime="text/csv",
+                )
+
                 # Apply Threshold to predictions in session state
                 predictions = st.session_state.predictions  # Get predictions from session state
+
+                # Threshold Slider
+                st.subheader("Hi! you can decide on your own model threshold")
+                threshold = st.slider(
+                    "Choose a threshold for classification (e.g., 0.5 for default)",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.5,
+                    step=0.01,
+                )
+
                 predictions_binary = [1 if prob >= threshold else 0 for prob in predictions]
                 total_clicks = sum(predictions_binary)
                 total_no_clicks = len(predictions_binary) - total_clicks
