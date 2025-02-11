@@ -118,41 +118,118 @@ def calculate_metrics(y_true, y_pred, y_scores):
     return metrics
 
 
-def results(predictions_path: str, predictions_proba_path:str,  ground_truth_path: str):
+def compute_precision_recall_curve(y_true, y_scores, model_name: str):
+    """
+    Compute and plot Precision-Recall curve and return the threshold that maximizes average precision.
+    
+    Parameters:
+        y_true (array): True labels
+        y_scores (array): Predicted probabilities
+        model_name (str): Model name for the plot and file naming
+    
+    Returns:
+        float: Optimal threshold that maximizes average precision
+    """
+    # Compute Precision-Recall curve
+    precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
+    avg_precision = average_precision_score(y_true, y_scores)
+    
+    # Find the threshold that maximizes precision * recall
+    f1_scores = 2 * precision * recall / (precision + recall)
+    best_threshold = thresholds[f1_scores.argmax()] if len(f1_scores) > 0 else None
+    
+    # Plot Precision-Recall Curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall, precision, color='blue', lw=2,
+             label=f'Precision-Recall Curve (AP = {avg_precision:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve - {model_name}')
+    plt.legend(loc="lower left")
+    plt.savefig(f'metrics/{model_name}_precision_recall_curve.png')
+    plt.close()
+
+    return avg_precision, best_threshold
+
+
+
+def results(predictions_path: str, predictions_proba_path: str, ground_truth_path: str):
     predictions = get_data(predictions_path, header=False)
     predictions_proba = get_data(predictions_proba_path, header=False)
     ground_truth = get_data(ground_truth_path)
 
-    # Olga: Extract true labels and predictions
-    y_true = ground_truth
+    y_true_df = pd.read_csv("./X_test_1st_with_y.csv")
+    y_true = y_true_df['is_click']
     y_pred = predictions
-    y_scores = predictions_proba[1]
+    y_scores = predictions_proba
     model_name = predictions_path.split("/")[-1].split("_")[0]
 
     os.makedirs("metrics", exist_ok=True)
-    # Compute ROC curve
-    roc_auc = compute_roc_curve(y_true, y_scores, model_name) #Olga: call compute_roc_curve method
 
     # Generate Precision-Recall Curve and Average Precision
-    avg_precision = compute_precision_recall_curve(y_true, y_scores, model_name)
+    avg_precision, optimal_threshold = compute_precision_recall_curve(y_true, y_scores, model_name)
+
+    # Use optimal threshold to generate predictions
+    y_pred_optimal = (y_scores >= optimal_threshold).astype(int)
 
     # Generate confusion matrix
-    generate_confusion_matrix(y_true, y_pred, model_name) # Olga: call generate_confusion_matrix method
+    generate_confusion_matrix(y_true, y_pred_optimal, model_name)
 
     # Calculate metrics
-    metrics = calculate_metrics(y_true, y_pred, y_scores) # Olga: call calculate_metrics method
+    metrics = calculate_metrics(y_true, y_pred_optimal, y_scores)
 
-    # Add Average Precision to metrics
+    # Add Average Precision and Optimal Threshold to metrics
     metrics['Average Precision (AP)'] = avg_precision
+    metrics['Optimal Threshold'] = optimal_threshold
 
     # Save metrics to CSV
-    metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Valupe'])
+    metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Value'])
     metrics_df.to_csv(f'metrics/{model_name}_metrics.csv')
 
     # Print metrics
     print(f"Metrics for {model_name}:")
     for metric, value in metrics.items():
         print(f"{metric}: {value:.4f}")
+
+
+
+# def results(predictions_path: str, predictions_proba_path:str,  ground_truth_path: str):
+#     predictions = get_data(predictions_path, header=False)
+#     predictions_proba = get_data(predictions_proba_path, header=False)
+#     ground_truth = get_data(ground_truth_path)
+
+#     # Olga: Extract true labels and predictions
+#     # y_true = ground_truth
+#     y_true_df = pd.read_csv("/Users/saritmeshesha/Ydata/DSIP/X_test_1st_with_y.csv")
+#     y_true = y_true_df['is_click']
+#     y_pred = predictions
+#     y_scores = predictions_proba
+#     model_name = predictions_path.split("/")[-1].split("_")[0]
+
+#     os.makedirs("metrics", exist_ok=True)
+#     # Compute ROC curve
+#     roc_auc = compute_roc_curve(y_true, y_scores, model_name) #Olga: call compute_roc_curve method
+
+#     # Generate Precision-Recall Curve and Average Precision
+#     avg_precision = compute_precision_recall_curve(y_true, y_scores, model_name)
+
+#     # Generate confusion matrix
+#     generate_confusion_matrix(y_true, y_pred, model_name) # Olga: call generate_confusion_matrix method
+
+#     # Calculate metrics
+#     metrics = calculate_metrics(y_true, y_pred, y_scores) # Olga: call calculate_metrics method
+
+#     # Add Average Precision to metrics
+#     metrics['Average Precision (AP)'] = avg_precision
+
+#     # Save metrics to CSV
+#     metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Valupe'])
+#     metrics_df.to_csv(f'metrics/{model_name}_metrics.csv')
+
+#     # Print metrics
+#     print(f"Metrics for {model_name}:")
+#     for metric, value in metrics.items():
+#         print(f"{metric}: {value:.4f}")
 
 if __name__ == '__main__':
    parser = argparse.ArgumentParser(description="Trainer")

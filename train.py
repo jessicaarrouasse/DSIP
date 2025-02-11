@@ -18,16 +18,16 @@ def _get_data(path: str):
 
 def save_model(model_name, grid_search, features_name):
     os.makedirs("models", exist_ok=True)
-    with open(f'models/{model_name}.pkl', 'wb') as f:
+    with open(f'models/{model_name}_revisiting_users.pkl', 'wb') as f:
         pickle.dump(grid_search.best_estimator_, f)
 
     # Save best parameters as CSV
     params_df = pd.DataFrame([grid_search.best_params_])
-    params_df.to_csv(f'models/{model_name}_best_params.csv', index=False)
+    params_df.to_csv(f'models/{model_name}_revisit_best_params.csv', index=False)
 
     # Save best score as CSV
     score_df = pd.DataFrame([{'best_score': grid_search.best_score_}])
-    score_df.to_csv(f'models/{model_name}_best_score.csv', index=False)
+    score_df.to_csv(f'models/{model_name}_revisit_best_score.csv', index=False)
 
     feature_importance = pd.DataFrame({
         'feature': range(features_name),
@@ -35,7 +35,7 @@ def save_model(model_name, grid_search, features_name):
     })
     feature_importance =feature_importance.sort_values('importance', ascending=False)
     # Save feature importance
-    feature_importance.to_csv(f'models/{model_name}_feature_importance.csv', index=False)
+    feature_importance.to_csv(f'models/{model_name}_revisit_feature_importance.csv', index=False)
 
 def get_feature_importance(model_name, grid_search):
     if model_name == ADABOOST or model_name == RANDOM_FOREST:
@@ -132,22 +132,34 @@ def train_adaboost(X_train, y_train):
 
 def train_random_forest(X_train, y_train):
     # Initialize the classifier
-    rf = RandomForestClassifier(random_state=42)
+    rf = RandomForestClassifier(
+        n_estimators=100,         
+        max_depth=10,           
+        min_samples_split=2,      
+        min_samples_leaf=1,       
+        class_weight="balanced",  
+        random_state=42       
+    )
     
+    # Train the model directly - no use of grid search
+    rf.fit(X_train, y_train)
     # Define the parameter grid
-    param_grid = {
-        'n_estimators': [50, 100],
-        'max_depth': [10, None],
-        "min_samples_split": [2],
-        "min_samples_leaf": [1, 2],
-        "class_weight": ["balanced"]
-    }
+    # param_grid = {
+    #     'n_estimators': [50, 100],
+    #     'max_depth': [10, None],
+    #     "min_samples_split": [2],
+    #     "min_samples_leaf": [1, 2],
+    #     "class_weight": ["balanced"]
+    # }
     
     # Perform Grid Search
-    grid_search = perform_grid_search(X_train, y_train, rf, param_grid)
+    # grid_search = perform_grid_search(X_train, y_train, rf, param_grid)
     
     # Save the trained model
-    save_model(RANDOM_FOREST, grid_search, X_train.shape[1])
+    # save_model(RANDOM_FOREST, grid_search, X_train.shape[1])
+    # Save the trained model as a pickle file
+    with open("Random_Forest_revisiting_users", "wb") as f:
+        pickle.dump(rf, f)
     print("RandomForest saved")
 
 def unknown_model(*args):
