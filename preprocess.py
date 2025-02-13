@@ -40,8 +40,8 @@ class CTRFeatureExtractor:
 
       # Age-based interaction features
       if 'age_level' in df.columns and 'user_depth' in df.columns:
-         df['is_young_researcher'] = (df['age_level'] == 0) & (df['user_depth'] == 3)
-         df['is_young_immediate'] = (df['age_level'] == 0) & (df['user_depth'] == 1)
+         df['is_young_researcher'] = (df['age_level'] == 2) & (df['user_depth'] == 2)
+         df['is_old_thinker'] = (df['age_level'] == 6) & (df['user_depth'] == 3)
 
       # Product features
       if 'product_category_1' in df.columns:
@@ -70,7 +70,7 @@ class CTRFeatureExtractor:
       return [
          'hour', 'day_of_week', 'is_peak_hour', 'is_monday', 'is_night',
          'is_immediate_action', 'is_researcher', 'is_young_researcher',
-         'is_young_immediate', 'is_category_3', 'is_product_J',
+         'is_old_thinker', 'is_category_3', 'is_product_J',
          'is_top_campaign', 'is_top_webpage', 'is_high_ctr_group',
          'is_developed_city'
       ]
@@ -675,7 +675,7 @@ def main(csv_path):
    logging.info("Processing completed successfully")
 
 def balance_dataset(X: np.ndarray, y: np.ndarray,
-                    majority_ratio: float = 5.0,
+                    majority_ratio: float = 2.0,
                     random_state: int = 42) -> Tuple[np.ndarray, np.ndarray]:
    """
    Two-step balancing process with input validation:

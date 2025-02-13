@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
 import numpy as np
-from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report, balanced_accuracy_score, f1_score
+from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report, balanced_accuracy_score, f1_score, average_precision_score
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -12,6 +12,33 @@ import wandb
 def get_data(predictions_file):
     """Load predictions from CSV file."""
     return pd.read_csv(f'predictions/{predictions_file}')
+
+def compute_precision_recall_curve(y_true, y_scores, model_name: str):
+    """
+    compute and plot Precision-Recall curve
+
+    our parameters:
+        y_true (array): true labels
+        y_scores (array): predicted probabilities
+        model_name (str): name of the model
+    """
+    # Precision-Recall Curve
+    precision, recall, _ = precision_recall_curve(y_true, y_scores)
+    avg_precision = average_precision_score(y_true, y_scores)
+
+    # Plot Precision-Recall Curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall, precision, color='blue', lw=2,
+             label=f'Precision-Recall Curve (AP = {avg_precision:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve - {model_name}')
+    plt.legend(loc="lower left")
+    plt.savefig(f'metrics/{model_name}_precision_recall_curve.png')
+    plt.close()
+
+    return avg_precision
+
 
 def compute_roc_curve(y_true, y_scores, model_name, gender):
     #pass
@@ -89,6 +116,12 @@ def calculate_metrics(y_true, y_pred, y_scores):
     # confusion matrix elements
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
 
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+
+    # Find optimal threshold using Youden's J statistic
+    optimal_idx = np.argmax(tpr - fpr)
+    optimal_threshold = thresholds[optimal_idx] if len(thresholds) > optimal_idx else 0.5
+
     # metrics
     metrics = {
         'Accuracy': (tp + tn) / (tp + tn + fp + fn),
@@ -98,8 +131,12 @@ def calculate_metrics(y_true, y_pred, y_scores):
         'Precision': tp / (tp + fp),
         'F1 Score': 2 * tp / (2 * tp + fp + fn),
         'Macro F1': f1_score(y_true, y_pred, average='macro'),
-        'ROC AUC': auc(roc_curve(y_true, y_scores)[0], roc_curve(y_true, y_scores)[1])
+        'ROC AUC': auc(roc_curve(y_true, y_scores)[0], roc_curve(y_true, y_scores)[1]),
+        'Optimal Threshold': optimal_threshold,
+        'AVERAGE PR': average_precision_score(y_true, y_scores),
+        'FP': fp/(tp + tn + fp + fn)
     }
+
 
     # Log metrics to WandB
     if wandb.run is not None:

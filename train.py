@@ -10,6 +10,8 @@ from sklearn.metrics import make_scorer, f1_score
 import xgboost as xgb
 import lightgbm as lgb
 
+from threshold_optimiser import find_optimal_threshold, apply_optimal_threshold
+
 
 class SklearnWrapper:
     def __init__(self, model):
@@ -171,12 +173,12 @@ def train_xgboost(X_train, y_train, X_val, y_val):
 
     # Define parameter grid
     param_grid = {
-        'max_depth': [3],
-        'learning_rate': [0.3],
-        'n_estimators': [200],
-        'min_child_weight': [20],
-        'subsample': [0.9],
-        'colsample_bytree': [0.9],
+        'max_depth': [1, 3, 5, 7],
+        'learning_rate': [0.1, 0.3, 0.5],
+        'n_estimators': [50, 100, 200, 500],
+        'min_child_weight': [10, 20, 30, 50],
+        'subsample': [0.5, 0.7, 0.9, 1],
+        'colsample_bytree': [0.5, 0.7, 0.9, 1],
         'scale_pos_weight': [scale_pos_weight]
     }
 
@@ -235,6 +237,19 @@ def train_xgboost(X_train, y_train, X_val, y_val):
 
     print(f"Best Parameters: {best_params}")
     print(f"Best Validation F1 Score: {best_score:.4f}")
+
+    print("Finding optimal threshold...")
+    optimization_results = find_optimal_threshold(
+        SklearnWrapper(best_model),
+        X_val,
+        y_val,
+        metric='f1'
+    )
+
+    print(f"Optimal threshold: {optimization_results['optimal_threshold']:.3f}")
+    print(f"Best F1 score with optimal threshold: {optimization_results['best_score']:.3f}")
+
+    optimized_model = apply_optimal_threshold(best_model, optimization_results['optimal_threshold'])
 
     return SklearnWrapper(best_model)
 

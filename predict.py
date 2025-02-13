@@ -15,40 +15,56 @@ class SklearnWrapper:
         self.model = model
 
     def predict(self, X):
-        # If X is already a DMatrix, use it directly
-        if isinstance(X, xgb.DMatrix):
-            preds = self.model.predict(X)
-        else:
-            # If it's a DataFrame, use its feature names
-            if isinstance(X, pd.DataFrame):
-                dtest = xgb.DMatrix(X, feature_names=X.columns.tolist())
-            # If it's a numpy array, generate feature names
-            elif isinstance(X, np.ndarray):
-                feature_names = [f'feature_{i}' for i in range(X.shape[1])]
-                dtest = xgb.DMatrix(X, feature_names=feature_names)
-            else:
-                raise TypeError(f"Unsupported input type: {type(X)}")
-            preds = self.model.predict(dtest)
+        # Handle sklearn-style models
+        if hasattr(self.model, 'predict_proba'):
+            return self.model.predict(X)
 
-        return (preds > 0.5).astype(int)
+        # Handle XGBoost models
+        try:
+            # If X is already a DMatrix, use it directly
+            if isinstance(X, xgb.DMatrix):
+                dtest = X
+            else:
+                # If it's a DataFrame, use its feature names
+                if isinstance(X, pd.DataFrame):
+                    dtest = xgb.DMatrix(X, feature_names=X.columns.tolist())
+                # If it's a numpy array, generate feature names
+                elif isinstance(X, np.ndarray):
+                    feature_names = [f'feature_{i}' for i in range(X.shape[1])]
+                    dtest = xgb.DMatrix(X, feature_names=feature_names)
+                else:
+                    raise TypeError(f"Unsupported input type: {type(X)}")
+
+            preds = self.model.predict(dtest)
+            return (preds > 0.5).astype(int)
+        except Exception as e:
+            raise TypeError(f"Error predicting with model: {str(e)}")
 
     def predict_proba(self, X):
-        # If X is already a DMatrix, use it directly
-        if isinstance(X, xgb.DMatrix):
-            preds = self.model.predict(X)
-        else:
-            # If it's a DataFrame, use its feature names
-            if isinstance(X, pd.DataFrame):
-                dtest = xgb.DMatrix(X, feature_names=X.columns.tolist())
-            # If it's a numpy array, generate feature names
-            elif isinstance(X, np.ndarray):
-                feature_names = [f'feature_{i}' for i in range(X.shape[1])]
-                dtest = xgb.DMatrix(X, feature_names=feature_names)
-            else:
-                raise TypeError(f"Unsupported input type: {type(X)}")
-            preds = self.model.predict(dtest)
+        # Handle sklearn-style models
+        if hasattr(self.model, 'predict_proba'):
+            return self.model.predict_proba(X)
 
-        return np.column_stack((1 - preds, preds))
+        # Handle XGBoost models
+        try:
+            # If X is already a DMatrix, use it directly
+            if isinstance(X, xgb.DMatrix):
+                dtest = X
+            else:
+                # If it's a DataFrame, use its feature names
+                if isinstance(X, pd.DataFrame):
+                    dtest = xgb.DMatrix(X, feature_names=X.columns.tolist())
+                # If it's a numpy array, generate feature names
+                elif isinstance(X, np.ndarray):
+                    feature_names = [f'feature_{i}' for i in range(X.shape[1])]
+                    dtest = xgb.DMatrix(X, feature_names=feature_names)
+                else:
+                    raise TypeError(f"Unsupported input type: {type(X)}")
+
+            preds = self.model.predict(dtest)
+            return np.column_stack((1 - preds, preds))
+        except Exception as e:
+            raise TypeError(f"Error predicting probabilities with model: {str(e)}")
 
     def score(self, X, y):
         preds = self.predict(X)

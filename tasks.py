@@ -3,10 +3,10 @@ from invoke import task
 @task
 def pipeline(context):
 	context.run("python preprocess.py --csv-path train_dataset_full.csv")
-	context.run("python train.py -m naive_bayes")
-	context.run("python predict.py -m naive_bayes")
+	context.run("python train.py -m xgboost")
+	context.run("python predict.py -m xgboost")
 	# Calculate metrics
-	context.run("python results.py -m naive_bayes")
+	context.run("python results.py -m xgboost")
 
 	'''models = ['naive_bayes', 'xgboost', 'lightgbm']
 
