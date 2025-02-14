@@ -102,7 +102,7 @@ def perform_grid_search(X_train, y_train, model, param_grid):
         param_grid,
         cv=cv,
         scoring=scoring,
-        refit='f1',
+        refit='average_precision',
         n_jobs=-1,
         verbose=1,
         return_train_score=True
@@ -136,11 +136,12 @@ def train_random_forest(X_train, y_train):
     
     # Define the parameter grid
     param_grid = {
-        'n_estimators': [50, 100],
-        'max_depth': [10, None],
-        "min_samples_split": [2],
-        "min_samples_leaf": [1, 2],
-        "class_weight": ["balanced"]
+        'n_estimators': [200],
+        'max_depth': [10],
+        "min_samples_split": [10],
+        "min_samples_leaf": [4],
+        "class_weight": ["balanced"],
+        'bootstrap': [True, False]
     }
     
     # Perform Grid Search
