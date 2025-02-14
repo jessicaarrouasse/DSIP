@@ -39,8 +39,7 @@ def main():
                 with st.spinner("We are calling our model to work its magic 🚀🤖"):
                     # Preprocess the data
                     train_stats = load_pickle_cached("./data/train_stats.pkl")
-                    scaler = load_pickle_cached("./data/scaler.pkl")
-                    processed_data = preprocess_predict(input_df, train_stats, scaler)
+                    processed_data = preprocess_predict(input_df, train_stats)
 
                     # Generate predictions
                     model = load_pickle_cached(MODEL_PATH)
