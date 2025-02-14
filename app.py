@@ -91,6 +91,7 @@ def main():
                 total_clicks = sum(predictions_binary)
                 total_no_clicks = len(predictions_binary) - total_clicks
 
+
                 # Create CSV for binary predictions
                 predictions_binary_df = pd.DataFrame({'click_probability': st.session_state.predictions, 'prediction': predictions_binary})
                 binary_csv_buffer = StringIO()

@@ -352,22 +352,18 @@ def preprocess_train(df):
     train_stats = compute_train_stats(train_data)
     # save the train_stats as a pickle file
     save_pickle(train_stats, "train_stats.pkl")
-    # 3.2 Select features - TODO: consider to move to consts
+    # 3.2 Select features
     selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity',
                          'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count',
                          'product_category_1_age_level', 'user_id', 'hour', 'time_period',
                          'gender_binary', 'campaign_ctr', 'webpage_ctr', 'engagement_city']
     # 3.3 Feature Extraction for Training
     train_data = feature_extraction(train_data)
-    train_data = train_data.dropna(subset=selected_features)  # to experiment with? - random forest handles nulls
-    X_train, scaler = compute_scaling(selected_features, train_data, None)
+    X_train = train_data[selected_features]
     y_train = train_data['is_click']
-    # save scaler as a pickle file
-    save_pickle(scaler, "scaler.pkl")
     # 3.4 Feature Extraction for Test (using precomputed statistics)
     test_data = feature_extraction(test_data, train_stats)
-    test_data = test_data.dropna(subset=selected_features)  # to experiment with? - random forest handles nulls
-    X_test, _ = compute_scaling(selected_features, test_data, scaler)
+    X_test = test_data[selected_features]
     y_test = test_data['is_click']
 
     # Save the features and labels s csv files
@@ -384,8 +380,6 @@ def preprocess_predict(df, train_stats=None, scaler=None):
     # 2.1 Load Statistics on the Training Set + Scaler
     if not train_stats:
         train_stats = load_pickle("train_stats.pkl")
-    if not scaler:
-        scaler = load_pickle("scaler.pkl")
     # 2.2 Select features
     selected_features = ['campaign_product_ctr', 'webpage_id', 'product_category_popularity',
                          'product_popularity', 'var_1', 'is_weekend', 'is_holiday', 'session_count',
@@ -393,7 +387,7 @@ def preprocess_predict(df, train_stats=None, scaler=None):
                          'gender_binary', 'campaign_ctr', 'webpage_ctr', 'engagement_city']
     # 2.3 Feature Extraction for Test (using precomputed statistics)
     test_data = feature_extraction(test_data, train_stats)
-    X_test, _ = compute_scaling(selected_features, test_data, scaler)
+    X_test = test_data[selected_features]
 
     return X_test
 
