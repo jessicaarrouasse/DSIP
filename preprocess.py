@@ -61,7 +61,7 @@ class CTRFeatureExtractor:
 
       # City development features
       if 'city_development_index' in df.columns:
-         df['is_developed_city'] = df['city_development_index'] >= 0.8
+         df['is_developed_city'] = df['city_development_index'] >= 0.5
 
       return df
 
@@ -70,7 +70,7 @@ class CTRFeatureExtractor:
       return [
          'hour', 'day_of_week', 'is_peak_hour', 'is_monday', 'is_night',
          'is_immediate_action', 'is_researcher', 'is_young_researcher',
-         'is_old_thinker', 'is_category_3', 'is_product_J',
+         'is_category_3', 'is_product_J',
          'is_top_campaign', 'is_top_webpage', 'is_high_ctr_group',
          'is_developed_city'
       ]
